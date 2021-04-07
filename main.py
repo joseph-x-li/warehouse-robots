@@ -1,137 +1,225 @@
-import numpy as np
+import gym
 import torch
-import torch.nn as nn
+import numpy as np
+from torch import nn
+import random
+import torch.nn.functional as F
+import collections
+from torch.optim.lr_scheduler import StepLR
 
-ITERATIONS = 100
+"""
+Implementation of Double DQN for gym environments with discrete action space.
+"""
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-class SingleEnvironState:
-    def __init__(self, pos, goal):
-        self.pos = pos
-        self.goal = goal
-        self.velocity = 0  # 0, 1, 2
-        self.dir = 0       # N, E, S, W (0, 1, 2, 3)
-        self.movlookup = [(-1, 0), (0, 1), (1, 0), (0, -1)]  # N, E, S, W
+"""
+The Q-Network has as input a state s and outputs the state-action values q(s,a_1), ..., q(s,a_n) for all n actions.
+"""
+class QNetwork(nn.Module):
+    def __init__(self, action_dim, state_dim, hidden_dim):
+        super(QNetwork, self).__init__()
 
-    @property
-    def done(self):
-        return self.state.pos == self.state.goal
+        self.fc_1 = nn.Linear(state_dim, hidden_dim)
+        self.fc_2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc_3 = nn.Linear(hidden_dim, action_dim)
 
-    def rotate(self, drot):
-        self.dir = (self.dir + drot) % 4
+    def forward(self, inp):
 
-    def getforward(self, patch=None):
-        dr, dc = self.movlookup[self.state['dir']]
-        if patch is None:
-            dr, dc = dr * self.velocity, dc * self.velocity
-        else:
-            dr, dc = dr * patch, dc * patch
-        return (self.pos[0] + dr, self.pos[1] + dc)
+        x1 = F.leaky_relu(self.fc_1(inp))
+        x1 = F.leaky_relu(self.fc_2(x1))
+        x1 = self.fc_3(x1)
 
-    def _goaldist(self, pos):  # manhattan distance
-        return abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
+        return x1
 
-    def reward(self, nextpos):
-        return self.state._goaldist(self.state.pos) - self.state._goaldist(nextpos)
+"""
+memory to save the state, action, reward sequence from the current episode. 
+"""
+class Memory:
+    def __init__(self, len):
+        self.rewards = collections.deque(maxlen=len)
+        self.state = collections.deque(maxlen=len)
+        self.action = collections.deque(maxlen=len)
+        self.is_done = collections.deque(maxlen=len)
 
+    def update(self, state, action, reward, done):
+        # if the episode is finished we do not save to new state. Otherwise we have more states per episode than rewards
+        # and actions whcih leads to a mismatch when we sample from memory.
+        if not done:
+            self.state.append(state)
+        self.action.append(action)
+        self.rewards.append(reward)
+        self.is_done.append(done)
 
-class SingleEnviron:
-    rows, cols = BOARDSIZE = (100, 200)  # 100 rows, 200 cols (wide)
-    NAGENTS = 1
+    def sample(self, batch_size):
+        """
+        sample "batch_size" many (state, action, reward, next state, is_done) datapoints.
+        """
+        n = len(self.is_done)
+        idx = random.sample(range(0, n-1), batch_size)
+
+        A = torch.Tensor(self.state).to(device)
+        B = torch.LongTensor(self.action)[idx].to(device)
+        C = torch.Tensor(self.state)[1+np.array(idx)].to(device)
+        D = torch.Tensor(self.rewards)[idx].to(device)
+        E = torch.Tensor(self.is_done)[idx].to(device)
+        
+        return A,B,C,D,E
+               
 
     def reset(self):
-        self.board = np.zeros(self.BOARDSIZE, dtype=np.int32)
-        self.state = SingleEnvironState(
-            self._sample_point(), self._sample_point())
-        return self.state
-
-    def step(self, action):  # Action is 6-vector, S, C, F, R, U, L
-        '''return state, reward, done'''
-        action = torch.argmax(action)
-        if not (0 <= action <= 5):
-            print("Unrecognized action... Defaulting to Stop/Stay")
-            action = 0
-
-        if self.state.velocity == 0:  # Robot currently at rest
-            if action == 0:
-                return self._step_vel_0()
-            elif action in [1, 2]:
-                self.state.velocity = 1
-                return self._step_vel_1()
-            elif action in [3, 4, 5]:
-                self.state.rotate(action - 2)
-                return self.state, 0, self.state.done
-
-        elif self.state.velocity == 1:  # Robot currently creeping
-            if action == 0:
-                self.state.velocity = 0
-                return self._step_vel_0()
-            elif action in [1, 3, 4, 5]:
-                return self._step_vel_1()
-            elif action == 2:
-                self.state.velocity = 2
-                return self._step_vel_2()
-
-        elif self.state.velocity == 2:  # Robot currently fast
-            if action in [2, 3, 4, 5]:
-                return self._step_vel_2()
-            else:
-                self.state.velocity = 1
-                return self._step_vel_1()
-
-    def _is_collision(self, pos):
-        return not ((0 <= pos[0] < self.rows) and (0 <= pos[1] < self.cols))
-
-    def _step_vel_0(self):
-        return self.state, 0, self.state.done
-
-    def _step_vel_1(self):
-        nextpos = self.state.getforward()
-        if self._is_collision(nextpos):
-            self.state.velocity = 0
-            reward = -10
-        else:
-            reward = self.state.reward(nextpos)
-            self.state.pos = nextpos
-        return self.state, reward, self.state.done
-
-    def _step_vel_2(self):
-        nextpos = self.state.getforward()
-        if self._is_collision(nextpos):
-            reward = -20
-            self.state.velocity = 0
-            nextpos_v1 = self.state.getforward(patch=1)
-            if not self._is_collision(nextpos_v1):  # flatten against wall
-                self.state.pos = nextpos_v1
-        else:
-            reward = self.state.reward(nextpos)
-            self.state.pos = nextpos
-
-        return self.state, reward, self.state.done
-
-    def _sample_point(self):
-        # gen pos from [0, BOARDSIZE[0])
-        initial_pos_r = np.random.randint(BOARDSIZE[0], size=self.NAGENTS)
-        initial_pos_c = np.random.randint(BOARDSIZE[1], size=self.NAGENTS)
-        return list(zip(initial_pos_r, initial_pos_c))[0]
+        self.rewards.clear()
+        self.state.clear()
+        self.action.clear()
+        self.is_done.clear()
 
 
-class Agent(nn.Module):
-    def __init__(self):
-        super().__init__()
+def select_action(model, env, state, eps):
+    state = torch.Tensor(state).to(device)
+    with torch.no_grad():
+        values = model(state)
 
-        self.fc1 = nn.Linear(6, 24)
-        self.relu1 = nn.ReLU()
-        self.fc2 = nn.Linear(24, 12)
-        self.relu2 = nn.ReLU()
-        self.fc3 = nn.Linear(12, 6)  # S, C, F, R, U, L
+    # select a random action wih probability eps
+    if random.random() <= eps:
+        action = np.random.randint(0, env.action_space.n)
+    else:
+        action = np.argmax(values.cpu().numpy())
 
-    def forward(self, out):
-        out = self.fc1(out)
-        out = self.relu1(out)
-        out = self.fc2(out)
-        out = self.relu2(out)
-        out = self.fc3(out)
+    return action
 
 
-breakpoint()
+def train(batch_size, current, target, optim, memory, gamma):
+
+    states, actions, next_states, rewards, is_done = memory.sample(batch_size)
+
+    q_values = current(states)
+
+    next_q_values = current(next_states)
+    next_q_state_values = target(next_states)
+
+    q_value = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+    next_q_value = next_q_state_values.gather(1, torch.max(next_q_values, 1)[1].unsqueeze(1)).squeeze(1)
+    expected_q_value = rewards + gamma * next_q_value * (1 - is_done)
+
+    loss = (q_value - expected_q_value.detach()).pow(2).mean()
+
+    optim.zero_grad()
+    loss.backward()
+    optim.step()
+
+
+def evaluate(Qmodel, env, repeats, horizon=100):
+    """
+    Runs a greedy policy with respect to the current Q-Network for "repeats" many episodes. Returns the average
+    episode reward.
+    """
+    Qmodel.eval()
+    perform = 0
+    for _ in range(repeats):
+        state = env.reset()
+        for _ in range(horizon):
+            state = torch.Tensor(state).to(device)
+            with torch.no_grad():
+                values = Qmodel(state)
+            action = np.argmax(values.cpu().numpy())
+            state, reward, done, _ = env.step(action)
+            perform += reward
+            if done: break
+    Qmodel.train()
+    return perform / repeats
+
+
+def update_parameters(current_model, target_model):
+    target_model.load_state_dict(current_model.state_dict())
+
+
+def main(gamma=0.99, lr=1e-3, min_episodes=20, eps=1, eps_decay=0.995, eps_min=0.01, update_step=10, batch_size=64, update_repeats=50,
+         num_episodes=3000, seed=42, max_memory_size=50000, lr_gamma=0.9, lr_step=100, measure_step=100,
+         measure_repeats=100, hidden_dim=64, horizon=200, render=False, render_step=50):
+    """
+    :param gamma: reward discount factor
+    :param lr: learning rate for the Q-Network
+    :param min_episodes: we wait "min_episodes" many episodes in order to aggregate enough data before starting to train
+    :param eps: probability to take a random action during training
+    :param eps_decay: after every episode "eps" is multiplied by "eps_decay" to reduces exploration over time
+    :param eps_min: minimal value of "eps"
+    :param update_step: after "update_step" many episodes the Q-Network is trained "update_repeats" many times with a
+    batch of size "batch_size" from the memory.
+    :param batch_size: see above
+    :param update_repeats: see above
+    :param num_episodes: the number of episodes played in total
+    :param seed: random seed for reproducibility
+    :param max_memory_size: size of the replay memory
+    :param lr_gamma: learning rate decay for the Q-Network
+    :param lr_step: every "lr_step" episodes we decay the learning rate
+    :param measure_step: every "measure_step" episode the performance is measured
+    :param measure_repeats: the amount of episodes played in to asses performance
+    :param hidden_dim: hidden dimensions for the Q_network
+    :param horizon: number of steps taken in the environment before terminating the episode (prevents very long episodes)
+    :param render: if "True" renders the environment every "render_step" episodes
+    :param render_step: see above
+    :return: the trained Q-Network and the measured performances
+    """
+    env = gym.SingleEnviron()
+    torch.manual_seed(seed)
+    # env.seed(seed)
+
+    Q_1 = QNetwork(action_dim=env.action_space.n, state_dim=env.observation_space.shape[0],
+                                    hidden_dim=hidden_dim).to(device)
+    Q_2 = QNetwork(action_dim=env.action_space.n, state_dim=env.observation_space.shape[0],
+                                    hidden_dim=hidden_dim).to(device)
+    
+    # transfer parameters from Q_1 to Q_2
+    update_parameters(Q_1, Q_2)
+
+    # we only train Q_1
+    for param in Q_2.parameters():
+        param.requires_grad = False
+
+    optimizer = torch.optim.Adam(Q_1.parameters(), lr=lr)
+    scheduler = StepLR(optimizer, step_size=lr_step, gamma=lr_gamma)
+
+    memory = Memory(max_memory_size)
+    performance = []
+
+    for episode in range(num_episodes):
+        # display the performance
+        if episode % measure_step == 0:
+            performance.append([episode, evaluate(Q_1, env, measure_repeats, horizon)])
+            print("episode: ", episode)
+            print("rewards: ", performance[-1][1])
+            print("lr: ", scheduler.get_last_lr()[0])
+            print("eps: ", eps)
+
+        state = env.reset()
+        memory.state.append(state)
+
+        for _ in range(horizon):
+            action = select_action(Q_2, env, state, eps)
+            state, reward, done, _ = env.step(action)
+
+            # render the environment if render == True
+            if render and episode % render_step == 0:
+                env.render()
+
+            # save state, action, reward sequence
+            memory.update(state, action, reward, done)
+            if done: break
+
+        if episode >= min_episodes and episode % update_step == 0:
+            for _ in range(update_repeats):
+                train(batch_size, Q_1, Q_2, optimizer, memory, gamma)
+
+            # transfer new parameter from Q_1 to Q_2
+            update_parameters(Q_1, Q_2)
+
+            # update learning rate and eps # NOTE: LIFTED TO IF-STATEMENT TO PREVENT: In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+            scheduler.step()
+
+        eps = max(eps*eps_decay, eps_min)
+
+    return Q_1, performance
+
+
+if __name__ == '__main__':
+    main()
