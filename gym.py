@@ -6,7 +6,8 @@ ITERATIONS = 100
 
 
 class SingleEnvironState:
-    def __init__(self, pos, goal):
+    def __init__(self, pos, goal, br, bc):
+        self.br, self.bc = br, bc
         self.pos = pos
         self.goal = goal
         self.velocity = 0  # 0, 1, 2
@@ -15,11 +16,22 @@ class SingleEnvironState:
 
     @property
     def done(self):
-        return self.pos == self.goal
-    
+        retval = self.pos == self.goal
+        if retval:
+            print("SEKS SEE")
+        return retval
+
     @property
     def tensor(self):
-        vec = self.pos + self.goal + (self.velocity, self.dir)
+        vec = (
+            (self.pos[0] * 2 / self.br) - 1, 
+            (self.pos[1] * 2 / self.bc) - 1,
+            (self.goal[0] * 2 / self.br) - 1, 
+            (self.goal[1] * 2 / self.bc) - 1,
+            self.velocity - 1, 
+            (self.dir / 1.5) - 1
+        )
+        # return np.array(vec)
         return torch.Tensor(vec)
 
     def rotate(self, drot):
@@ -34,31 +46,39 @@ class SingleEnvironState:
         return (self.pos[0] + dr, self.pos[1] + dc)
 
     def _goaldist(self, pos):  # manhattan distance
-        return abs(self.pos[0] - self.goal[0]) + abs(self.pos[1] - self.goal[1])
+        return abs(pos[0] - self.goal[0]) + abs(pos[1] - self.goal[1])
 
     def reward(self, nextpos):
         rwd = self._goaldist(self.pos) - self._goaldist(nextpos)
         return rwd
 
+
 ActionSpace = namedtuple('ActionSpace', ['n'])
-ObservationSpace = namedtuple('ObservationSpace', ['shape'])
+ObservationSpace = namedtuple('ObservationSpace', ['shape', 'low'])
+Low = namedtuple('Low', ['size'])
 
 
 class SingleEnviron:
-    rows, cols = BOARDSIZE = (100, 200)  # 100 rows, 200 cols (wide)
+    rows, cols = BOARDSIZE = (50, 50)  # 100 rows, 200 cols (wide)
     NAGENTS = 1
-    
+    WALL_COLLISION_REWARD = -0.5
+
     action_space = ActionSpace(n=6)
-    observation_space = ObservationSpace(shape=(6,))
+    observation_space = ObservationSpace(shape=(6,), low=Low(size=6))
+
+    def __init__(self):
+        self.reset()
 
     def reset(self):
         self.board = np.zeros(self.BOARDSIZE, dtype=np.int32)
-        self.state = SingleEnvironState(
-            self._sample_point(), self._sample_point())
+        # self.state = SingleEnvironState(
+        #     self._sample_point(), self._sample_point())
+        self.state = SingleEnvironState((5, 5), (5, 10), self.rows, self.cols)
         return self.state.tensor
 
     def step(self, action):  # Action is 6-vector, S, C, F, R, U, L
-        print(f"\rCurrPos: {self.state.tensor}; Action received: {action}               ", end="")
+        print(
+            f"\rAction received: {action}; Dist: {self.state._goaldist(self.state.pos)} State: {self.state.tensor};       ", end="")
         if not (0 <= action <= 5):
             print("Unrecognized action... Defaulting to Stop/Stay")
             action = 0
@@ -100,7 +120,7 @@ class SingleEnviron:
         nextpos = self.state.getforward()
         if self._is_collision(nextpos):
             self.state.velocity = 0
-            reward = -10
+            reward = self.WALL_COLLISION_REWARD
         else:
             reward = self.state.reward(nextpos)
             self.state.pos = nextpos
@@ -109,7 +129,7 @@ class SingleEnviron:
     def _step_vel_2(self):
         nextpos = self.state.getforward()
         if self._is_collision(nextpos):
-            reward = -20
+            reward = self.WALL_COLLISION_REWARD
             self.state.velocity = 0
             nextpos_v1 = self.state.getforward(patch=1)
             if not self._is_collision(nextpos_v1):  # flatten against wall
@@ -125,3 +145,7 @@ class SingleEnviron:
         initial_pos_r = np.random.randint(self.BOARDSIZE[0], size=self.NAGENTS)
         initial_pos_c = np.random.randint(self.BOARDSIZE[1], size=self.NAGENTS)
         return list(zip(initial_pos_r, initial_pos_c))[0]
+
+
+def make(s):
+    return SingleEnviron()

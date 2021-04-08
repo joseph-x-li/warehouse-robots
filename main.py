@@ -54,18 +54,17 @@ class Memory:
     def sample(self, batch_size):
         """
         sample "batch_size" many (state, action, reward, next state, is_done) datapoints.
+        states, actions, next_states, rewards, is_done
         """
         n = len(self.is_done)
         idx = random.sample(range(0, n-1), batch_size)
-
-        A = torch.Tensor(self.state).to(device)
+        A = torch.vstack([self.state[i] for i in idx]).to(device)
         B = torch.LongTensor(self.action)[idx].to(device)
-        C = torch.Tensor(self.state)[1+np.array(idx)].to(device)
+        C = torch.vstack([self.state[i + 1] for i in idx]).to(device)
         D = torch.Tensor(self.rewards)[idx].to(device)
         E = torch.Tensor(self.is_done)[idx].to(device)
         
-        return A,B,C,D,E
-               
+        return A, B, C, D, E
 
     def reset(self):
         self.rewards.clear()
@@ -133,8 +132,8 @@ def update_parameters(current_model, target_model):
     target_model.load_state_dict(current_model.state_dict())
 
 
-def main(gamma=0.99, lr=1e-3, min_episodes=20, eps=1, eps_decay=0.995, eps_min=0.01, update_step=10, batch_size=64, update_repeats=50,
-         num_episodes=3000, seed=42, max_memory_size=50000, lr_gamma=0.9, lr_step=100, measure_step=100,
+def main(gamma=0.99, lr=1e-4, min_episodes=20, eps=1, eps_decay=0.995, eps_min=0.01, update_step=10, batch_size=64, update_repeats=50,
+         num_episodes=10000, seed=42, max_memory_size=50000, lr_gamma=0.9, lr_step=100, measure_step=500,
          measure_repeats=100, hidden_dim=64, horizon=200, render=False, render_step=50):
     """
     :param gamma: reward discount factor
@@ -185,8 +184,9 @@ def main(gamma=0.99, lr=1e-3, min_episodes=20, eps=1, eps_decay=0.995, eps_min=0
     for episode in range(num_episodes):
         # display the performance
         if episode % measure_step == 0:
+            
+            print("\nepisode: ", episode)
             performance.append([episode, evaluate(Q_1, env, measure_repeats, horizon)])
-            print("episode: ", episode)
             print("rewards: ", performance[-1][1])
             print("lr: ", scheduler.get_last_lr()[0])
             print("eps: ", eps)
