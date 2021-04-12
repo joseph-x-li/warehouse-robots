@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from collections import namedtuple
+import random
 
 ITERATIONS = 100
 
@@ -31,8 +32,8 @@ class SingleEnvironState:
             self.velocity - 1, 
             (self.dir / 1.5) - 1
         )
-        # return np.array(vec)
-        return torch.Tensor(vec)
+        return np.array(vec)
+        # return torch.Tensor(vec)
 
     def rotate(self, drot):
         self.dir = (self.dir + drot) % 4
@@ -52,18 +53,21 @@ class SingleEnvironState:
         rwd = self._goaldist(self.pos) - self._goaldist(nextpos)
         return rwd
 
+class ActionSpace:
+    def __init__(self, n):
+        self.n = n
+    def sample(self):
+        return random.randint(0, self.n - 1)
 
-ActionSpace = namedtuple('ActionSpace', ['n'])
 ObservationSpace = namedtuple('ObservationSpace', ['shape', 'low'])
 Low = namedtuple('Low', ['size'])
-
 
 class SingleEnviron:
     rows, cols = BOARDSIZE = (50, 50)  # 100 rows, 200 cols (wide)
     NAGENTS = 1
-    WALL_COLLISION_REWARD = -0.5
+    WALL_COLLISION_REWARD = -0.05
 
-    action_space = ActionSpace(n=6)
+    action_space = ActionSpace(6)
     observation_space = ObservationSpace(shape=(6,), low=Low(size=6))
 
     def __init__(self):
@@ -71,14 +75,13 @@ class SingleEnviron:
 
     def reset(self):
         self.board = np.zeros(self.BOARDSIZE, dtype=np.int32)
-        # self.state = SingleEnvironState(
-        #     self._sample_point(), self._sample_point())
-        self.state = SingleEnvironState((5, 5), (5, 10), self.rows, self.cols)
+        self.state = SingleEnvironState(self._sample_point(), self._sample_point(), self.rows, self.cols)
+        # self.state = SingleEnvironState((5, 5), (5, 10), self.rows, self.cols)
         return self.state.tensor
 
     def step(self, action):  # Action is 6-vector, S, C, F, R, U, L
         print(
-            f"\rAction received: {action}; Dist: {self.state._goaldist(self.state.pos)} State: {self.state.tensor};       ", end="")
+            f"\rAction received: {action}; Dist: {self.state._goaldist(self.state.pos)}", end="")
         if not (0 <= action <= 5):
             print("Unrecognized action... Defaulting to Stop/Stay")
             action = 0
