@@ -12,8 +12,6 @@ class State:
     @property
     def done(self):
         retval = self.pos == self.goal
-        if retval:
-            print("SEKS SEE")
         return retval
 
     @property
@@ -41,6 +39,7 @@ class State:
 class Gym(GymMock):
     rows, cols = BOARDSIZE = (50, 50)  # 100 rows, 200 cols (wide)
     WALL_COLLISION_REWARD = -0.05
+    DONE_REWARD = 2
     speed_mod = False
 
     def __init__(self):
@@ -57,17 +56,21 @@ class Gym(GymMock):
     def step(self, action):
         print(
             f"\rAction received: {action}; Dist: {self.state._goaldist(self.state.pos)}  ", end="")
-        if action == 0:
-            return self.state.tensor, 0, self.state.done, None
+        if action == 0 and self.state.done:
+            return self.state.tensor, self.DONE_REWARD, False, None
+        elif action == 0 and not self.state.done:
+            return self.state.tensor, 0, False, None
 
         nextpos = self.state.getforward(action - 1)
         if self._is_collision(nextpos):
             reward = self.WALL_COLLISION_REWARD
         else:
             reward = self.state.reward(nextpos)
-            reward -= 0.01
             self.state.pos = nextpos
-        return self.state.tensor, reward, self.state.done, None
+        if self.state.done:
+            reward += self.DONE_REWARD
+
+        return self.state.tensor, reward, False, None
 
     def _sample_point(self):
         return (random.randint(0, self.BOARDSIZE[0] - 1), random.randint(0, self.BOARDSIZE[1] - 1))

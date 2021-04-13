@@ -9,6 +9,10 @@ from gyms import warehouse_simple as gym
 import random
 from collections import deque
 
+import wandb
+
+wandb.init(project="Warehouse")
+
 
 class BasicBuffer:
   def __init__(self, max_size):
@@ -60,10 +64,33 @@ def mini_batch_train(env, agent, max_episodes, max_steps, batch_size):
 
             if done or step == max_steps-1:
                 episode_rewards.append(episode_reward)
+                wandb.log({"Reward": episode_reward})
                 print("Episode " + str(episode) + ": " + str(episode_reward))
                 break
 
             state = next_state
+
+    return episode_rewards
+
+def eval(env, agent, max_episodes, max_steps):
+    episode_rewards = []
+
+    for episode in range(max_episodes):
+        state = env.reset()
+        episode_reward = 0
+
+        for step in range(max_steps):
+            action = agent.get_action(state, eps=0)
+            next_state, reward, done, _ = env.step(action)
+            episode_reward += reward
+            state = next_state
+            
+            if done: break
+
+        episode_rewards.append(episode_reward)
+        wandb.log({"Eval Reward": episode_reward})
+        print("Episode " + str(episode) + ": " + str(episode_reward))
+
 
     return episode_rewards
 
@@ -196,10 +223,11 @@ class DQNAgent:
 
 
 env_id = "CartPole-v0"
-MAX_EPISODES = 1000
-MAX_STEPS = 500
+MAX_EPISODES = 150
+MAX_STEPS = 300
 BATCH_SIZE = 32
 
 env = gym.make(env_id)
 agent = DQNAgent(env, use_conv=False)
 episode_rewards = mini_batch_train(env, agent, MAX_EPISODES, MAX_STEPS, BATCH_SIZE)
+episode_rewards = eval(env, agent, 75, MAX_STEPS)
