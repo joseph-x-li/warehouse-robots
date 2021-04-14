@@ -4,14 +4,13 @@ import torch.nn.functional as F
 import torch.autograd as autograd
 
 import numpy as np
-# import gym
-from gyms import warehouse_simple as gym
+import gym
 import random
 from collections import deque
 
 import wandb
 
-wandb.init(project="Warehouse")
+wandb.init(project="Warehouse_Complex")
 
 
 class BasicBuffer:
@@ -176,12 +175,12 @@ class DQNAgent:
         self.optimizer = torch.optim.Adam(self.model.parameters())
         
         
-    def get_action(self, state, eps=0.20):
+    def get_action(self, state, eps=0.2):
         state = torch.FloatTensor(state).float().unsqueeze(0).to(self.device)
         qvals = self.model.forward(state)
         action = np.argmax(qvals.cpu().detach().numpy())
         
-        if(np.random.randn() < eps):
+        if(np.random.uniform() < eps):
             return self.env.action_space.sample()
 
         return action
@@ -222,8 +221,8 @@ class DQNAgent:
             target_param.data.copy_(self.tau * param + (1 - self.tau) * target_param)
 
 
-env_id = "CartPole-v0"
-MAX_EPISODES = 150
+env_id = "warehouse_complex"
+MAX_EPISODES = 500
 MAX_STEPS = 300
 BATCH_SIZE = 32
 

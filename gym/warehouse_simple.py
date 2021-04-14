@@ -77,6 +77,3 @@ class Gym(GymMock):
 
     def _is_collision(self, pos):
         return not ((0 <= pos[0] < self.rows) and (0 <= pos[1] < self.cols))
-
-def make(s):
-    return Gym()

@@ -1,12 +1,8 @@
-import numpy as np
-import torch
-from collections import namedtuple
+from .gym_mock import GymMock
 import random
+import numpy as np
 
-ITERATIONS = 100
-
-
-class SingleEnvironState:
+class State:
     def __init__(self, pos, goal, br, bc):
         self.br, self.bc = br, bc
         self.pos = pos
@@ -18,8 +14,6 @@ class SingleEnvironState:
     @property
     def done(self):
         retval = self.pos == self.goal
-        if retval:
-            print("SEKS SEE")
         return retval
 
     @property
@@ -33,7 +27,6 @@ class SingleEnvironState:
             (self.dir / 1.5) - 1
         )
         return np.array(vec)
-        # return torch.Tensor(vec)
 
     def rotate(self, drot):
         self.dir = (self.dir + drot) % 4
@@ -53,30 +46,18 @@ class SingleEnvironState:
         rwd = self._goaldist(self.pos) - self._goaldist(nextpos)
         return rwd
 
-class ActionSpace:
-    def __init__(self, n):
-        self.n = n
-    def sample(self):
-        return random.randint(0, self.n - 1)
-
-ObservationSpace = namedtuple('ObservationSpace', ['shape', 'low'])
-Low = namedtuple('Low', ['size'])
-
-class SingleEnviron:
+class Gym(GymMock):
     rows, cols = BOARDSIZE = (50, 50)  # 100 rows, 200 cols (wide)
-    NAGENTS = 1
     WALL_COLLISION_REWARD = -0.05
-
-    action_space = ActionSpace(6)
-    observation_space = ObservationSpace(shape=(6,), low=Low(size=6))
+    DONE_REWARD = 2
 
     def __init__(self):
+        super().__init__(6, (6,))
         self.reset()
 
     def reset(self):
-        self.board = np.zeros(self.BOARDSIZE, dtype=np.int32)
-        self.state = SingleEnvironState(self._sample_point(), self._sample_point(), self.rows, self.cols)
-        # self.state = SingleEnvironState((5, 5), (5, 10), self.rows, self.cols)
+        start, end = self._sample_point(), self._sample_point()
+        self.state = State(start, end, self.rows, self.cols)
         return self.state.tensor
 
     def step(self, action):  # Action is 6-vector, S, C, F, R, U, L
@@ -94,7 +75,8 @@ class SingleEnviron:
                 return self._step_vel_1()
             elif action in [3, 4, 5]:
                 self.state.rotate(action - 2)
-                return self.state.tensor, 0, self.state.done, None
+                reward = self.DONE_REWARD if self.state.done else 0
+                return self.state.tensor, reward, False, None
 
         elif self.state.velocity == 1:  # Robot currently creeping
             if action == 0:
@@ -117,7 +99,8 @@ class SingleEnviron:
         return not ((0 <= pos[0] < self.rows) and (0 <= pos[1] < self.cols))
 
     def _step_vel_0(self):
-        return self.state.tensor, 0, self.state.done, None
+        reward = self.DONE_REWARD if self.state.done else 0
+        return self.state.tensor, reward, False, None
 
     def _step_vel_1(self):
         nextpos = self.state.getforward()
@@ -127,7 +110,8 @@ class SingleEnviron:
         else:
             reward = self.state.reward(nextpos)
             self.state.pos = nextpos
-        return self.state.tensor, reward, self.state.done, None
+        reward += self.DONE_REWARD if self.state.done else 0
+        return self.state.tensor, reward, False, None
 
     def _step_vel_2(self):
         nextpos = self.state.getforward()
@@ -141,14 +125,9 @@ class SingleEnviron:
             reward = self.state.reward(nextpos)
             self.state.pos = nextpos
 
-        return self.state.tensor, reward, self.state.done, None
+        reward += self.DONE_REWARD if self.state.done else 0
+
+        return self.state.tensor, reward, False, None
 
     def _sample_point(self):
-        # gen pos from [0, BOARDSIZE[0])
-        initial_pos_r = np.random.randint(self.BOARDSIZE[0], size=self.NAGENTS)
-        initial_pos_c = np.random.randint(self.BOARDSIZE[1], size=self.NAGENTS)
-        return list(zip(initial_pos_r, initial_pos_c))[0]
-
-
-def make(s):
-    return SingleEnviron()
+        return (random.randint(0, self.BOARDSIZE[0] - 1), random.randint(0, self.BOARDSIZE[1] - 1))
