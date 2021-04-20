@@ -10,7 +10,7 @@ from collections import deque
 
 import wandb
 
-wandb.init(project="Warehouse_Complex")
+wandb.init(project="Warehouse")
 
 
 class BasicBuffer:
@@ -175,7 +175,7 @@ class DQNAgent:
         self.optimizer = torch.optim.Adam(self.model.parameters())
         
         
-    def get_action(self, state, eps=0.2):
+    def get_action(self, state, eps=0.4):
         state = torch.FloatTensor(state).float().unsqueeze(0).to(self.device)
         qvals = self.model.forward(state)
         action = np.argmax(qvals.cpu().detach().numpy())

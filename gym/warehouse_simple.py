@@ -40,7 +40,7 @@ class Gym(GymMock):
     rows, cols = BOARDSIZE = (50, 50)  # 100 rows, 200 cols (wide)
     WALL_COLLISION_REWARD = -0.05
     DONE_REWARD = 2
-    speed_mod = False
+    speed_mod = True
 
     def __init__(self):
         action_space_size = 9 if self.speed_mod else 5 # S + (NEWS, 2 * NEWS)
