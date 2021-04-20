@@ -64,8 +64,8 @@ class State:
     @property
     def tensor(self):
         accum = []
+        n_vec = np.array([self.rows / 2, self.cols / 2])
         for pos, goal in zip(self.poss, self.goals):
-            n_vec = np.array([self.rows / 2, self.cols / 2])
             accum.append(
                 np.hstack((
                     self._render_view(pos).flatten(),
