@@ -15,8 +15,7 @@ GOAL_REWARD = 2
 
 
 kernel = f"""
-__global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field)
-{{
+__global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field){{
     const int tidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int movlookup_r[4] = {{ -1, 0, 1,  0 }};
@@ -27,14 +26,17 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
     float reward = 0.0;
     for(int i = tidx; i < {n_agents}; i += nthreads){{
         int action = actions[i];
-        if(action != 0){{ // not a no-op
-            int currpos[2];
-            int goal[2];
-            currpos[0] = poss[i * 2];
-            currpos[1] = poss[(i * 2) + 1];
-            goal[0] = goals[i * 2];
-            goal[1] = goals[(i * 2) + 1];
-            int nextpos[2];
+        int currpos[2];
+        int goal[2];
+        currpos[0] = poss[i * 2];
+        currpos[1] = poss[(i * 2) + 1];
+        goal[0] = goals[i * 2];
+        goal[1] = goals[(i * 2) + 1];
+        int nextpos[2];
+        if(action == 0){{// a no-op
+            nextpos[0] = currpos[0];
+            nextpos[1] = currpos[1];
+        }} else {{ 
             nextpos[0] = currpos[0] + movlookup_r[action - 1];
             nextpos[1] = currpos[1] + movlookup_c[action - 1];
 
@@ -47,22 +49,22 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
                 nextpos[0] = currpos[0];
                 nextpos[1] = currpos[1];
             }}
-
-            reward += abs(currpos[0] - goal[0]) - abs(nextpos[0] - goal[0]);
-            reward += abs(currpos[1] - goal[1]) - abs(nextpos[1] - goal[1]);
-            if(currpos[0] == goal[0] && currpos[1] == goal[1]){{
-                reward += {GOAL_REWARD};
-            }}
-            if(nextpos[0] != currpos[0] || nextpos[1] != currpos[1]){{
-                poss[i * 2] = nextpos[0];
-                poss[i * 2 + 1] = nextpos[1];
-                oldpos_r[oldposctr] = currpos[0];
-                oldpos_c[oldposctr] = currpos[1];
-                oldposctr += 1;
-            }}
-            rewards[i] = reward;
-
         }}
+
+        reward += abs(currpos[0] - goal[0]) - abs(nextpos[0] - goal[0]);
+        reward += abs(currpos[1] - goal[1]) - abs(nextpos[1] - goal[1]);
+        if(nextpos[0] == goal[0] && nextpos[1] == goal[1]){{
+            reward += {GOAL_REWARD};
+        }}
+        if(nextpos[0] != currpos[0] || nextpos[1] != currpos[1]){{
+            poss[i * 2] = nextpos[0];
+            poss[i * 2 + 1] = nextpos[1];
+            oldpos_r[oldposctr] = currpos[0];
+            oldpos_c[oldposctr] = currpos[1];
+            oldposctr += 1;
+        }}
+        rewards[i] = reward;
+
     }}
     __syncthreads();
 
@@ -71,9 +73,7 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
         int c = oldpos_c[i];
         field[r * {cols} + c] = 0;
     }}
-
-}}
-"""
+}}"""
 
 print(kernel)
 
