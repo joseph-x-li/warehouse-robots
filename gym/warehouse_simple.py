@@ -7,7 +7,12 @@ class State:
         self.br, self.bc = br, bc
         self.pos = pos
         self.goal = goal
-        self.movlookup = [(-1, 0), (0, 1), (1, 0), (0, -1)]  # N, E, S, W
+        self.movlookup = [
+            (-1, 0), 
+            (0, 1), 
+            (1, 0), 
+            (0, -1)
+        ]  # N, E, S, W
 
     @property
     def done(self):
@@ -49,13 +54,12 @@ class Gym(GymMock):
 
     def reset(self):
         start, end = self._sample_point(), self._sample_point()
-        print(f"Start: {start} \tEnd: {end}")
         self.state = State(start, end, self.rows, self.cols)
         return self.state.tensor
     
     def step(self, action):
-        print(
-            f"\rAction received: {action}; Dist: {self.state._goaldist(self.state.pos)}  ", end="")
+        # print(
+        #     f"\rAction received: {action}; Dist: {self.state._goaldist(self.state.pos)}  ", end="")
         if action == 0 and self.state.done:
             return self.state.tensor, self.DONE_REWARD, False, None
         elif action == 0 and not self.state.done:

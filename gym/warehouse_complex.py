@@ -61,8 +61,8 @@ class Gym(GymMock):
         return self.state.tensor
 
     def step(self, action):  # Action is 6-vector, S, C, F, R, U, L
-        print(
-            f"\rAction received: {action}; Dist: {self.state._goaldist(self.state.pos)}", end="")
+        # print(
+        #     f"\rAction received: {action}; Dist: {self.state._goaldist(self.state.pos)}", end="")
         if not (0 <= action <= 5):
             print("Unrecognized action... Defaulting to Stop/Stay")
             action = 0

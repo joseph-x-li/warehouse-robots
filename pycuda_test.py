@@ -29,7 +29,7 @@ import pycuda.driver as drv
 
 # replace 0s with results of a + b
 import time
-add_them(drv.Out(dest), drv.In(a), drv.In(b), block=(400,1,1), grid=(1,1))
+add_them(drv.Out(dest), drv.In(a), drv.In(b), block=(1,1,1), grid=(1,1,1))
 
 # should print block of 0s -> (a+b) - (a+b)
 print(dest - (a + b))

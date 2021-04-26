@@ -1,7 +1,10 @@
 from .gym_mock import GymMock
 import random
 import numpy as np
-
+import pycuda.driver as cuda
+import pycuda.autoinit
+from pycuda.compiler import SourceModule
+from gym import gpu_kernels
 
 # Tweak these to your heart's content
 WALL_COLLISION_REWARD = -1.1 
@@ -14,54 +17,37 @@ class State:
         self.nagents = nagents
         self.view_size = view_size
         self.rows, self.cols = rows, cols
-        self.poss = self._generate_positions()
-        self.goals = self._generate_positions()
-        self.movlookup = np.array([
-            (-1, 0), # north
-            (0, 1),  # east
-            (1, 0),  # south
-            (0, -1)  # west
-        ], dtype=np.int32)
-        self.field = np.zeros((rows, cols), dtype=np.int32)
-        for pos in self.poss:
-            self.field[tuple(pos)] = 1
+        poss = self._generate_positions()
+        goals = self._generate_positions()
+        field = np.zeros((rows, cols), dtype=np.int32)
+        for pos in poss:
+            field[tuple(pos)] = 1
+        self.poss_gpu = cuda.mem_alloc(poss.nbytes)
+        self.goals_gpu = cuda.mem_alloc(goals.nbytes)
+        self.field_gpu = cuda.mem_alloc(field.nbytes)
+        cuda.memcpy_htod(self.poss_gpu, poss)
+        cuda.memcpy_htod(self.goals_gpu, goals)
+        cuda.memcpy_htod(self.field_gpu, field)
 
-    def step(self, actions): 
-        rewards = []
-        oldpositions = []
-        for idx, (action, pos, goal) in enumerate(zip(actions, self.poss, self.goals)):
-            reward = 0
-            if action == 0:
-                nextpos = pos
-            else:
-                nextpos = pos + self.movlookup[action - 1]
-                collision_status = self._collision(nextpos)
-                if collision_status == 0: # no collision
-                    pass
-                elif collision_status == -1:
-                    reward += WALL_COLLISION_REWARD
-                    nextpos = pos
-                elif collision_status == -2:
-                    reward += ROBOT_COLLISION_REWARD
-                    nextpos = pos
+        self.step_gpu = gpu_kernels.stepkernel(rows, cols, nagents, WALL_COLLISION_REWARD, ROBOT_COLLISION_REWARD, GOAL_REWARD)
 
-            reward += self._mdist(goal, pos) - self._mdist(goal, nextpos)
-
-            if np.array_equal(nextpos, goal):
-                reward += GOAL_REWARD
-
-            if not np.array_equal(nextpos, pos):
-                oldpositions.append(pos)
-                self.poss[idx] = nextpos
-
-            self.field[tuple(nextpos)] = 1
-
-            rewards.append(reward)
-
-        for pos in oldpositions:
-            self.field[tuple(pos)] = 0
-
-        return np.array(rewards)
+    def step(self, actions):
+        rewards = np.zeros((self.nagents,), dtype=np.float32)
+        start = cuda.Event()
+        end = cuda.Event()
+        start.record()
+        self.step_gpu(
+            cuda.Out(rewards), 
+            cuda.In(actions), 
+            self.poss_gpu, 
+            self.goals_gpu, 
+            self.field_gpu,
+            block=(1024,1,1)
+        )
+        end.record()
+        end.synchronize()
+        print(f"GPU time (ms): {start.time_till(end)}")
+        return rewards
 
     @property
     def tensor(self):
@@ -77,11 +63,11 @@ class State:
             )
         return np.array(accum)
 
-    def _collision(self, pos):
+    def _collision(self, position):
         if not ((0 <= pos[0] < self.rows) and (0 <= pos[1] < self.cols)):
             return -1
 
-        if self.field[tuple(pos)] != 0:
+        if self.field[position] != 0:
             return -2
 
         return 0
@@ -110,7 +96,6 @@ class State:
                 num_set.add((a, b))
         return np.array(list(num_set), dtype=np.int32)
 
-import time
 
 class Gym(GymMock):
     rows, cols = (100, 400) 
@@ -125,13 +110,7 @@ class Gym(GymMock):
     def reset(self):
         self.state = State(self.nagents, self.rows, self.cols)
         # return self.state.tensor
-    
-    def step(self, actions):
-        # start = time.time()
-        rewards = self.state.step(actions)
-        # print(f"Reward timing: {time.time() - start}")
-        # start = time.time()
-        # tsr = self.state.tensor
-        # print(f"Render timing: {time.time() - start}")
 
-        # return tsr, rewards, False, None
+    def step(self, actions):
+        rewards = self.state.step(actions)
+        # return self.state.tensor, rewards, False, None
