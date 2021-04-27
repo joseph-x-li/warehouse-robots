@@ -8,10 +8,6 @@ import gym
 import random
 from collections import deque
 
-import wandb
-
-wandb.init(project="Warehouse")
-
 
 class BasicBuffer:
   def __init__(self, max_size):
@@ -220,6 +216,9 @@ class DQNAgent:
         for target_param, param in zip(self.target_model.parameters(), self.model.parameters()):
             target_param.data.copy_(self.tau * param + (1 - self.tau) * target_param)
 
+
+import wandb
+wandb.init(project="Warehouse")
 
 env_id = "warehouse_complex"
 MAX_EPISODES = 500

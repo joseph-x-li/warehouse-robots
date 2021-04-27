@@ -63,5 +63,4 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
         field[r * {cols} + c] = 0;
     }}
 }}"""
-    mod = SourceModule(kernel)
-    return mod.get_function("step")
+    return SourceModule(kernel).get_function("step")

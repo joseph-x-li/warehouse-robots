@@ -12,7 +12,7 @@ ROBOT_COLLISION_REWARD = -3
 GOAL_REWARD = 2
 
 class State:
-    def __init__(self, nagents, rows, cols, view_size=11):
+    def __init__(self, nagents, rows, cols, view_size):
         assert view_size % 2 == 1
         self.nagents = nagents
         self.view_size = view_size
@@ -35,10 +35,12 @@ class State:
         rewards = np.zeros((self.nagents,), dtype=np.float32)
         start = cuda.Event()
         end = cuda.Event()
+        hold1 = cuda.Out(rewards)
+        hold2 = cuda.In(actions)
         start.record()
         self.step_gpu(
-            cuda.Out(rewards), 
-            cuda.In(actions), 
+            hold1,
+            hold2,
             self.poss_gpu, 
             self.goals_gpu, 
             self.field_gpu,
@@ -101,14 +103,15 @@ class Gym(GymMock):
     rows, cols = (100, 400) 
     speed_mod = False
     nagents = 1000
+    view_size = 11
 
     def __init__(self):
         action_space_size = 9 if self.speed_mod else 5 # S + (NEWS, 2 * NEWS)
-        super().__init__(action_space_size, (4, )) # mypos, goalpos
+        super().__init__(action_space_size, (4 + (view_size ** 2), )) # mypos, goalpos, receptive field
         self.reset()
 
     def reset(self):
-        self.state = State(self.nagents, self.rows, self.cols)
+        self.state = State(self.nagents, self.rows, self.cols, self.view_size)
         # return self.state.tensor
 
     def step(self, actions):
