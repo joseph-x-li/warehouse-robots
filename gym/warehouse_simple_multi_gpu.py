@@ -100,14 +100,14 @@ class State:
 
 
 class Gym(GymMock):
-    rows, cols = (100, 400) 
+    rows, cols = (1000, 1000) 
     speed_mod = False
-    nagents = 1000
+    nagents = 10000
     view_size = 11
 
     def __init__(self):
         action_space_size = 9 if self.speed_mod else 5 # S + (NEWS, 2 * NEWS)
-        super().__init__(action_space_size, (4 + (view_size ** 2), )) # mypos, goalpos, receptive field
+        super().__init__(action_space_size, (4 + (self.view_size ** 2), )) # mypos, goalpos, receptive field
         self.reset()
 
     def reset(self):

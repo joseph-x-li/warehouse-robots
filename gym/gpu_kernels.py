@@ -2,13 +2,14 @@ import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 
-def stepkernel(rows, cols, n_agents, WALL_COLLISION_REWARD, ROBOT_COLLISION_REWARD, GOAL_REWARD):
+def stepkernel(rows, cols, n_agents, WALL_COLLISION_REWARD, ROBOT_COLLISION_REWARD, GOAL_REWARD, extended=False):
+    extstr = "_ext" if extended else ""
     kernel = f"""
 __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field){{
     const int tidx = threadIdx.x;
     const int nthreads = blockDim.x;
-    const int movlookup_r[4] = {{ -1, 0, 1,  0 }};
-    const int movlookup_c[4] = {{  0, 1, 0, -1 }};
+    const int movlookup_r[8] = {{ -1, 0, 1,  0 , -2, 0, 2,  0 }};
+    const int movlookup_c[8] = {{  0, 1, 0, -1 , 0,  2, 0, -2 }};
     int oldposctr = 0;
     int oldpos_r[1000];
     int oldpos_c[1000];
@@ -25,7 +26,7 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
         if(action == 0){{// a no-op
             nextpos[0] = currpos[0];
             nextpos[1] = currpos[1];
-        }} else {{ 
+        }} else if(action < 5) {{  // Single step
             nextpos[0] = currpos[0] + movlookup_r[action - 1];
             nextpos[1] = currpos[1] + movlookup_c[action - 1];
 
