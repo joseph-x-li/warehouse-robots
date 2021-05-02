@@ -2,7 +2,15 @@ import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 
-def stepkernel(rows, cols, nagents, WALL_COLLISION_REWARD, ROBOT_COLLISION_REWARD, GOAL_REWARD, extended=False):
+def stepkernel(
+    rows,
+    cols,
+    nagents,
+    WALL_COLLISION_REWARD,
+    ROBOT_COLLISION_REWARD,
+    GOAL_REWARD,
+    extended=False,
+):
     kernel = f""" \
 __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field){{
     const int tidx = threadIdx.x;
@@ -64,6 +72,7 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
     }}
 }}"""
     return SourceModule(kernel).get_function("step")
+
 
 def tensorkernel(rows, cols, view_size, nagents):
     kernel = f""" \

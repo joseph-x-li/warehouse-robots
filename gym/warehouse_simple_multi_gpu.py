@@ -8,9 +8,10 @@ from pycuda.compiler import SourceModule
 from gym import gpu_kernels
 
 # Tweak these to your heart's content
-WALL_COLLISION_REWARD = -1.1 
+WALL_COLLISION_REWARD = -1.1
 ROBOT_COLLISION_REWARD = -3
 GOAL_REWARD = 2
+
 
 class State:
     def __init__(self, nagents, rows, cols, view_size):
@@ -30,7 +31,14 @@ class State:
         cuda.memcpy_htod(self.goals_gpu, goals)
         cuda.memcpy_htod(self.field_gpu, field)
 
-        self.step_gpu = gpu_kernels.stepkernel(rows, cols, nagents, WALL_COLLISION_REWARD, ROBOT_COLLISION_REWARD, GOAL_REWARD)
+        self.step_gpu = gpu_kernels.stepkernel(
+            rows,
+            cols,
+            nagents,
+            WALL_COLLISION_REWARD,
+            ROBOT_COLLISION_REWARD,
+            GOAL_REWARD,
+        )
         self.tensor_gpu = gpu_kernels.tensorkernel(rows, cols, view_size, nagents)
 
     def step(self, actions):
@@ -43,10 +51,10 @@ class State:
         self.step_gpu(
             hold1,
             hold2,
-            self.poss_gpu, 
-            self.goals_gpu, 
+            self.poss_gpu,
+            self.goals_gpu,
             self.field_gpu,
-            block=(1024,1,1)
+            block=(1024, 1, 1),
         )
         end.record()
         end.synchronize()
@@ -61,11 +69,7 @@ class State:
         hold1 = cuda.Out(states)
         start.record()
         self.tensor_gpu(
-            hold1,
-            self.poss_gpu, 
-            self.goals_gpu, 
-            self.field_gpu,
-            block=(1024,1,1)
+            hold1, self.poss_gpu, self.goals_gpu, self.field_gpu, block=(1024, 1, 1)
         )
         end.record()
         end.synchronize()
@@ -82,14 +86,16 @@ class State:
 
 
 class Gym(GymMock):
-    rows, cols = (1000, 1000) 
+    rows, cols = (1000, 1000)
     speed_mod = False
     nagents = 1000
     view_size = 11
 
     def __init__(self):
-        action_space_size = 9 if self.speed_mod else 5 # S + (NEWS, 2 * NEWS)
-        super().__init__(action_space_size, (4 + (self.view_size ** 2), )) # mypos, goalpos, receptive field
+        action_space_size = 9 if self.speed_mod else 5  # S + (NEWS, 2 * NEWS)
+        super().__init__(
+            action_space_size, (4 + (self.view_size ** 2),)
+        )  # mypos, goalpos, receptive field
         self.reset()
 
     def reset(self):
@@ -99,7 +105,9 @@ class Gym(GymMock):
     def step(self, actions):
         start = time.time()
         rewards = self.state.step(actions)
-        print("[GPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
+        print(
+            "[GPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000)
+        )
         start = time.time()
         tsr = self.state.tensor
         print("[GPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))

@@ -5,17 +5,17 @@ from numba.experimental import jitclass
 from numba import int32, float32
 
 spec = [
-    ('WALL_COLLISION_REWARD', float32),
-    ('ROBOT_COLLISION_REWARD', float32),
-    ('GOAL_REWARD', float32),
-    ('nagents', int32),
-    ('view_size', int32),
-    ('rows', int32),
-    ('cols', int32),
-    ('poss', int32[:, :]),
-    ('goals', int32[:, :]),
-    ('movlookup', int32[:, :]),
-    ('field', int32[:, :]),
+    ("WALL_COLLISION_REWARD", float32),
+    ("ROBOT_COLLISION_REWARD", float32),
+    ("GOAL_REWARD", float32),
+    ("nagents", int32),
+    ("view_size", int32),
+    ("rows", int32),
+    ("cols", int32),
+    ("poss", int32[:, :]),
+    ("goals", int32[:, :]),
+    ("movlookup", int32[:, :]),
+    ("field", int32[:, :]),
 ]
 
 
@@ -31,17 +31,15 @@ class State:
         self.rows, self.cols = rows, cols
         self.poss = self._generate_positions()
         self.goals = self._generate_positions()
-        self.movlookup = np.array([
-            (-1, 0), # north
-            (0, 1),  # east
-            (1, 0),  # south
-            (0, -1)  # west
-        ], dtype=np.int32)
+        self.movlookup = np.array(
+            [(-1, 0), (0, 1), (1, 0), (0, -1)],  # north  # east  # south  # west
+            dtype=np.int32,
+        )
         self.field = np.zeros((rows, cols), dtype=np.int32)
         for pos in self.poss:
             self.field[pos[0], pos[1]] = 1
 
-    def step(self, actions, numba=False): 
+    def step(self, actions, numba=False):
         rewards = np.zeros((self.nagents,), dtype=float32)
         oldpositions = []
         for idx, (action, pos, goal) in enumerate(zip(actions, self.poss, self.goals)):
@@ -51,7 +49,7 @@ class State:
             else:
                 nextpos = pos + self.movlookup[action - 1]
                 collision_status = self._collision(nextpos)
-                if collision_status == 0: # no collision
+                if collision_status == 0:  # no collision
                     pass
                 elif collision_status == -1:
                     reward += self.WALL_COLLISION_REWARD
@@ -83,11 +81,13 @@ class State:
         accum = np.zeros((self.nagents, dimshape), dtype=np.float32)
         n_vec = np.array([self.rows / 2, self.cols / 2], dtype=np.float32)
         for idx, (pos, goal) in enumerate(zip(self.poss, self.goals)):
-            accum[idx] = np.hstack((
-                self._render_view(pos).flatten(),
-                (pos.astype(np.float32) / n_vec) - 1,
-                (goal.astype(np.float32) / n_vec) - 1,
-            )).astype(np.float32)
+            accum[idx] = np.hstack(
+                (
+                    self._render_view(pos).flatten(),
+                    (pos.astype(np.float32) / n_vec) - 1,
+                    (goal.astype(np.float32) / n_vec) - 1,
+                )
+            ).astype(np.float32)
         return accum
 
     def _collision(self, pos):
@@ -108,7 +108,9 @@ class State:
         correction = self.view_size // 2
         for r in range(self.view_size):
             for c in range(self.view_size):
-                fieldr, fieldc = pos + np.array((r - correction, c - correction), dtype=np.int32)
+                fieldr, fieldc = pos + np.array(
+                    (r - correction, c - correction), dtype=np.int32
+                )
                 if not ((0 <= fieldr < self.rows) and (0 <= fieldc < self.cols)):
                     continue
                 view[r, c] = self.field[fieldr, fieldc]
@@ -123,27 +125,31 @@ class State:
                 num_set.add((a, b))
         return np.array(list(num_set), dtype=np.int32)
 
+
 import time
 
+
 class Gym(GymMock):
-    rows, cols = (1000, 1000) 
+    rows, cols = (1000, 1000)
     speed_mod = False
     nagents = 1000
     view_size = 11
 
     def __init__(self):
-        action_space_size = 9 if self.speed_mod else 5 # S + (NEWS, 2 * NEWS)
-        super().__init__(action_space_size, (4, )) # mypos, goalpos
+        action_space_size = 9 if self.speed_mod else 5  # S + (NEWS, 2 * NEWS)
+        super().__init__(action_space_size, (4,))  # mypos, goalpos
         self.reset()
 
     def reset(self):
         self.state = State(self.nagents, self.rows, self.cols, self.view_size)
         return self.state.tensor
-    
+
     def step(self, actions):
         start = time.time()
         rewards = self.state.step(actions)
-        print("[CPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
+        print(
+            "[CPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000)
+        )
         start = time.time()
         tsr = self.state.tensor
         print("[CPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))

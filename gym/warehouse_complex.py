@@ -2,13 +2,14 @@ from .gym_mock import GymMock
 import random
 import numpy as np
 
+
 class State:
     def __init__(self, pos, goal, br, bc):
         self.br, self.bc = br, bc
         self.pos = pos
         self.goal = goal
         self.velocity = 0  # 0, 1, 2
-        self.dir = 0       # N, E, S, W (0, 1, 2, 3)
+        self.dir = 0  # N, E, S, W (0, 1, 2, 3)
         self.movlookup = [(-1, 0), (0, 1), (1, 0), (0, -1)]  # N, E, S, W
 
     @property
@@ -19,12 +20,12 @@ class State:
     @property
     def tensor(self):
         vec = (
-            (self.pos[0] * 2 / self.br) - 1, 
+            (self.pos[0] * 2 / self.br) - 1,
             (self.pos[1] * 2 / self.bc) - 1,
-            (self.goal[0] * 2 / self.br) - 1, 
+            (self.goal[0] * 2 / self.br) - 1,
             (self.goal[1] * 2 / self.bc) - 1,
-            self.velocity - 1, 
-            (self.dir / 1.5) - 1
+            self.velocity - 1,
+            (self.dir / 1.5) - 1,
         )
         return np.array(vec)
 
@@ -45,6 +46,7 @@ class State:
     def reward(self, nextpos):
         rwd = self._goaldist(self.pos) - self._goaldist(nextpos)
         return rwd
+
 
 class Gym(GymMock):
     rows, cols = BOARDSIZE = (50, 50)  # 100 rows, 200 cols (wide)
@@ -130,4 +132,7 @@ class Gym(GymMock):
         return self.state.tensor, reward, False, None
 
     def _sample_point(self):
-        return (random.randint(0, self.BOARDSIZE[0] - 1), random.randint(0, self.BOARDSIZE[1] - 1))
+        return (
+            random.randint(0, self.BOARDSIZE[0] - 1),
+            random.randint(0, self.BOARDSIZE[1] - 1),
+        )

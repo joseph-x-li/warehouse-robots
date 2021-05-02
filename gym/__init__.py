@@ -10,6 +10,7 @@ lookup = {
     "warehouse_complex": warehouse_complex.Gym,
 }
 
+
 def make(env):
     try:
         return lookup[env]()
