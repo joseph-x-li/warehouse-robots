@@ -1,6 +1,7 @@
 from .gym_mock import GymMock
 import random
 import numpy as np
+import time
 import pycuda.driver as cuda
 import pycuda.autoinit
 from pycuda.compiler import SourceModule
@@ -30,6 +31,7 @@ class State:
         cuda.memcpy_htod(self.field_gpu, field)
 
         self.step_gpu = gpu_kernels.stepkernel(rows, cols, nagents, WALL_COLLISION_REWARD, ROBOT_COLLISION_REWARD, GOAL_REWARD)
+        self.tensor_gpu = gpu_kernels.tensorkernel(rows, cols, view_size, nagents)
 
     def step(self, actions):
         rewards = np.zeros((self.nagents,), dtype=np.float32)
@@ -48,47 +50,27 @@ class State:
         )
         end.record()
         end.synchronize()
-        print(f"GPU time (ms): {start.time_till(end)}")
+        print("[GPU]\t[STEP]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
         return rewards
 
     @property
     def tensor(self):
-        accum = []
-        n_vec = np.array([self.rows / 2, self.cols / 2])
-        for pos, goal in zip(self.poss, self.goals):
-            accum.append(
-                np.hstack((
-                    self._render_view(pos).flatten(),
-                    pos / n_vec - 1,
-                    goal / n_vec - 1,
-                ))
-            )
-        return np.array(accum)
-
-    def _collision(self, position):
-        if not ((0 <= pos[0] < self.rows) and (0 <= pos[1] < self.cols)):
-            return -1
-
-        if self.field[position] != 0:
-            return -2
-
-        return 0
-
-    @staticmethod
-    def _mdist(a, b):
-        return abs(a - b).sum()
-
-    def _render_view(self, pos):
-        view = np.full((self.view_size, self.view_size), -1, dtype=np.int32)
-        correction = self.view_size // 2
-        for r in range(self.view_size):
-            for c in range(self.view_size):
-                fieldr, fieldc = pos + np.array((r - correction, c - correction), dtype=np.int32)
-                if not ((0 <= fieldr < self.rows) and (0 <= fieldc < self.cols)):
-                    continue
-                view[r, c] = self.field[fieldr, fieldc]
-
-        return view
+        states = np.zeros((self.nagents, self.view_size ** 2 + 4), dtype=np.float32)
+        start = cuda.Event()
+        end = cuda.Event()
+        hold1 = cuda.Out(states)
+        start.record()
+        self.tensor_gpu(
+            hold1,
+            self.poss_gpu, 
+            self.goals_gpu, 
+            self.field_gpu,
+            block=(1024,1,1)
+        )
+        end.record()
+        end.synchronize()
+        print("[GPU]\t[TSR]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
+        return states
 
     def _generate_positions(self):
         num_set = set()
@@ -102,7 +84,7 @@ class State:
 class Gym(GymMock):
     rows, cols = (1000, 1000) 
     speed_mod = False
-    nagents = 10000
+    nagents = 1000
     view_size = 11
 
     def __init__(self):
@@ -112,8 +94,13 @@ class Gym(GymMock):
 
     def reset(self):
         self.state = State(self.nagents, self.rows, self.cols, self.view_size)
-        # return self.state.tensor
+        return self.state.tensor
 
     def step(self, actions):
+        start = time.time()
         rewards = self.state.step(actions)
-        # return self.state.tensor, rewards, False, None
+        print("[GPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
+        start = time.time()
+        tsr = self.state.tensor
+        print("[GPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
+        return tsr, rewards, False, None

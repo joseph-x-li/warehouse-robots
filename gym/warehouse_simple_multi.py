@@ -10,7 +10,6 @@ spec = [
     ('GOAL_REWARD', float32),
     ('nagents', int32),
     ('view_size', int32),
-    ('view_reach', int32),
     ('rows', int32),
     ('cols', int32),
     ('poss', int32[:, :]),
@@ -29,7 +28,6 @@ class State:
         self.GOAL_REWARD = 2
         self.nagents = nagents
         self.view_size = view_size
-        self.view_reach = view_size // 2
         self.rows, self.cols = rows, cols
         self.poss = self._generate_positions()
         self.goals = self._generate_positions()
@@ -39,26 +37,12 @@ class State:
             (1, 0),  # south
             (0, -1)  # west
         ], dtype=np.int32)
-        self.field = np.full((rows + view_size - 1, cols + view_size - 1), -1, dtype=np.int32)
-        self.field[self.view_reach:-self.view_reach, self.view_reach:-self.view_reach] = 0
+        self.field = np.zeros((rows, cols), dtype=np.int32)
         for pos in self.poss:
-            self.field[pos[0] + self.view_reach, pos[1] + self.view_reach] = 1
+            self.field[pos[0], pos[1]] = 1
 
     def step(self, actions, numba=False): 
-        # if numba:
-        #     rewards = np.zeros(shape=actions.shape, dtype=np.float32)
-        #     self.numbastep(
-        #         actions,
-        #         self.rows,
-        #         self.cols,
-        #         self.nagents,
-        #         self.poss,
-        #         self.goals,
-        #         self.field,
-        #         rewards
-        #     )
-        #     return rewards
-        rewards = []
+        rewards = np.zeros((self.nagents,), dtype=float32)
         oldpositions = []
         for idx, (action, pos, goal) in enumerate(zip(actions, self.poss, self.goals)):
             reward = 0
@@ -87,12 +71,11 @@ class State:
 
             self.field[nextpos[0], nextpos[1]] = 1
 
-            rewards.append(reward)
+            rewards[idx] = reward
 
         for pos in oldpositions:
             self.field[pos[0], pos[1]] = 0
-
-        return np.array(rewards)
+        return rewards
 
     @property
     def tensor(self):
@@ -145,7 +128,7 @@ import time
 class Gym(GymMock):
     rows, cols = (1000, 1000) 
     speed_mod = False
-    nagents = 10000
+    nagents = 1000
     view_size = 11
 
     def __init__(self):
@@ -155,14 +138,13 @@ class Gym(GymMock):
 
     def reset(self):
         self.state = State(self.nagents, self.rows, self.cols, self.view_size)
-        # return self.state.tensor
+        return self.state.tensor
     
     def step(self, actions):
-        # start = time.time()
+        start = time.time()
         rewards = self.state.step(actions)
-        # print(f"Reward timing: {time.time() - start}")
-        # start = time.time()
-        # tsr = self.state.tensor
-        # print(f"Render timing: {time.time() - start}")
-
-        # return tsr, rewards, False, None
+        print("[CPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
+        start = time.time()
+        tsr = self.state.tensor
+        print("[CPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
+        return tsr, rewards, False, None

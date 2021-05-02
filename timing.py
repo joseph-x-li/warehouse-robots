@@ -13,7 +13,6 @@ def timeenv(name):
 
 def timeenv_multi(name):
     env = gym.make(name)
-    # import pdb; pdb.set_trace()
     n_actions = env.action_space.n
 
     n_agents = env.nagents

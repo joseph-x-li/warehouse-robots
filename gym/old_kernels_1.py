@@ -3,8 +3,7 @@ from pycuda.compiler import SourceModule
 
 
 def stepkernel(rows, cols, nagents, WALL_COLLISION_REWARD, ROBOT_COLLISION_REWARD, GOAL_REWARD, extended=False):
-    kernel = f""" \
-__global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field){{
+    kernel = f"""__global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field){{
     const int tidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int movlookup_r[8] = {{ -1, 0, 1,  0 , -2, 0, 2,  0 }};
@@ -66,34 +65,35 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
     return SourceModule(kernel).get_function("step")
 
 def tensorkernel(rows, cols, view_size, nagents):
-    kernel = f""" \
-__global__ void tensor(int *states, int *poss, int *goals, int *field){{
+    kernel = f"""__global__ void tensor(int *states, int *poss, int *goals, int *field){{
     const int tidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int view_range = {view_size // 2};
     const int displacement = {view_size ** 2};
     const int statesize = {view_size ** 2 + 4};
     for(int i = tidx; i < {nagents}; i += nthreads){{
-
         int pos[2];
         int goal[2];
         pos[0] = poss[i * 2];
         pos[1] = poss[(i * 2) + 1];
         goal[0] = goals[i * 2];
         goal[1] = goals[(i * 2) + 1];
-        
         states[i * statesize + displacement] = (2 * pos[0] / {rows}) + 1;
         states[i * statesize + displacement + 1] = (2 * pos[1] / {cols}) + 1;
         states[i * statesize + displacement + 2] = (2 * goal[0] / {rows}) + 1;
         states[i * statesize + displacement + 3] = (2 * goal[1] / {cols}) + 1;
-        
         for(int r = 0; r < {view_size}; r++){{
             for(int c = 0; c < {view_size}; c++){{
                 int fieldr = pos[0] + r - view_range;
                 int fieldc = pos[1] + c - view_range;
+                int oob = 0;
+                if(fieldr < 0 || {rows} <= fieldr)
+                    oob = 1;
+                if(fieldc < 0 || {cols} <= fieldc)
+                    oob = 1;
                 int fillval = -1;
-                if(fieldr < 0 || fieldc < 0 || {rows} <= fieldr || {cols} <= fieldc)
-                    fillval = field[fieldr * {cols} + fieldc];
+                if(oob == 0)
+                    fillval = field[fieldr * {rows} + fieldc];
                 int stateidx = statesize * i + r * {view_size} + c;
                 states[stateidx] = fillval;
             }}
