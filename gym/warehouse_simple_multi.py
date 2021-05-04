@@ -132,7 +132,7 @@ import time
 class Gym(GymMock):
     rows, cols = (1000, 1000)
     speed_mod = False
-    nagents = 1000
+    nagents = 10000
     view_size = 11
 
     def __init__(self):

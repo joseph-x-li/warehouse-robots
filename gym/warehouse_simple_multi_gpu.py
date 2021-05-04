@@ -14,6 +14,8 @@ GOAL_REWARD = 2
 
 
 class State:
+    step_gpu = None
+    tensor_gpu = None
     def __init__(self, nagents, rows, cols, view_size):
         assert view_size % 2 == 1
         self.nagents = nagents
@@ -31,15 +33,17 @@ class State:
         cuda.memcpy_htod(self.goals_gpu, goals)
         cuda.memcpy_htod(self.field_gpu, field)
 
-        self.step_gpu = gpu_kernels.stepkernel(
-            rows,
-            cols,
-            nagents,
-            WALL_COLLISION_REWARD,
-            ROBOT_COLLISION_REWARD,
-            GOAL_REWARD,
-        )
-        self.tensor_gpu = gpu_kernels.tensorkernel(rows, cols, view_size, nagents)
+        if self.step_gpu is None: # cache activity
+            self.step_gpu = gpu_kernels.stepkernel(
+                rows,
+                cols,
+                nagents,
+                WALL_COLLISION_REWARD,
+                ROBOT_COLLISION_REWARD,
+                GOAL_REWARD,
+            )
+        if self.tensor_gpu is None:
+            self.tensor_gpu = gpu_kernels.tensorkernel(rows, cols, view_size, nagents)
 
     def step(self, actions):
         rewards = np.zeros((self.nagents,), dtype=np.float32)
@@ -55,6 +59,7 @@ class State:
             self.goals_gpu,
             self.field_gpu,
             block=(1024, 1, 1),
+            grid=(1, 1, 1),
         )
         end.record()
         end.synchronize()
@@ -69,7 +74,12 @@ class State:
         hold1 = cuda.Out(states)
         start.record()
         self.tensor_gpu(
-            hold1, self.poss_gpu, self.goals_gpu, self.field_gpu, block=(1024, 1, 1)
+            hold1,
+            self.poss_gpu,
+            self.goals_gpu,
+            self.field_gpu,
+            block=(1024, 1, 1),
+            grid=(1, 1, 1),
         )
         end.record()
         end.synchronize()
@@ -88,7 +98,7 @@ class State:
 class Gym(GymMock):
     rows, cols = (1000, 1000)
     speed_mod = False
-    nagents = 1000
+    nagents = 10000
     view_size = 11
 
     def __init__(self):

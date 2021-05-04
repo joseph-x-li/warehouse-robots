@@ -13,7 +13,7 @@ def stepkernel(
 ):
     kernel = f""" \
 __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field){{
-    const int tidx = threadIdx.x;
+    const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int movlookup_r[8] = {{ -1, 0, 1,  0 , -2, 0, 2,  0 }};
     const int movlookup_c[8] = {{  0, 1, 0, -1 , 0,  2, 0, -2 }};
@@ -21,7 +21,7 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
     int oldpos_r[1000];
     int oldpos_c[1000];
     float reward = 0.0;
-    for(int i = tidx; i < {nagents}; i += nthreads){{
+    for(int i = threadidx; i < {nagents}; i += nthreads){{
         int action = actions[i];
         int currpos[2];
         int goal[2];
@@ -77,12 +77,12 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
 def tensorkernel(rows, cols, view_size, nagents):
     kernel = f""" \
 __global__ void tensor(int *states, int *poss, int *goals, int *field){{
-    const int tidx = threadIdx.x;
+    const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int view_range = {view_size // 2};
     const int displacement = {view_size ** 2};
     const int statesize = {view_size ** 2 + 4};
-    for(int i = tidx; i < {nagents}; i += nthreads){{
+    for(int i = threadidx; i < {nagents}; i += nthreads){{
 
         int pos[2];
         int goal[2];

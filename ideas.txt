@@ -1,0 +1,1 @@
+create a "WIDE" environment (takes in multiple states, many actions, does it all at once)
