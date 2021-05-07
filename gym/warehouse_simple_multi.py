@@ -44,31 +44,35 @@ class State:
         oldpositions = []
         for idx, (action, pos, goal) in enumerate(zip(actions, self.poss, self.goals)):
             reward = 0
+            initpos = pos.copy()
             if action == 0:
                 nextpos = pos
             else:
-                nextpos = pos + self.movlookup[action - 1]
-                collision_status = self._collision(nextpos)
-                if collision_status == 0:  # no collision
-                    pass
-                elif collision_status == -1:
-                    reward += self.WALL_COLLISION_REWARD
-                    nextpos = pos
-                elif collision_status == -2:
-                    reward += self.ROBOT_COLLISION_REWARD
-                    nextpos = pos
+                while(action > 0):
+                    nextpos = pos + self.movlookup[action - 1]
+                    collision_status = self._collision(nextpos)
+                    if collision_status == 0:  # no collision
+                        pass
+                    elif collision_status == -1:
+                        reward += self.WALL_COLLISION_REWARD
+                        nextpos = pos
+                    elif collision_status == -2:
+                        reward += self.ROBOT_COLLISION_REWARD
+                        nextpos = pos
+                    # mark on field where the robot went next
+                    self.field[nextpos[0], nextpos[1]] = 1
+                    # adding placeholders for old positions
+                    if not np.array_equal(nextpos, pos):
+                        oldpositions.append(pos)
+                    # taking multiple steps, need to update current pos to next step pos
+                    pos = nextpos
+                    action -= 4
+                self.poss[idx] = nextpos
 
-            reward += self._mdist(goal, pos) - self._mdist(goal, nextpos)
+            reward += self._mdist(goal, initpos) - self._mdist(goal, nextpos)
 
             if np.array_equal(nextpos, goal):
                 reward += self.GOAL_REWARD
-
-            if not np.array_equal(nextpos, pos):
-                oldpositions.append(pos)
-                self.poss[idx] = nextpos
-
-            self.field[nextpos[0], nextpos[1]] = 1
-
             rewards[idx] = reward
 
         for pos in oldpositions:

@@ -1,1 +1,11 @@
 create a "WIDE" environment (takes in multiple states, many actions, does it all at once)
+
+
+// 05/06
+Finish "double step" action thing for kernels :))
+Add loop/multiple steps to sequential version :))
+
+Compare correctness for both kernels
+Finish evolution training shit
+Parallel environments for GPU kernels (run n fields at one time in a kernel)
+WRITE REPORT AND CALL IT A FUCKING YEAR

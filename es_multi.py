@@ -59,9 +59,9 @@ def evaluate(agents, nrepeats, envname):
     return scores
 
 def main():
-    AGENTS = 500
-    REPEATS = 5 # number of times to repeat evaluation of an agent
-    GENERATIONS = 1000
+    AGENTS = 200
+    REPEATS = 16 # number of times to repeat evaluation of an agent
+    GENERATIONS = 100
     BEAM_SIZE = 20
     envname = "warehouse_simple_multi"
     _hold = gym.make(envname)
