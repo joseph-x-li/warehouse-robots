@@ -12,11 +12,11 @@ def stepkernel(
     extended=False,
 ):
     kernel = f""" \
-__global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field, int nrepeats){{
+__global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field){{
     const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
-    const int movlookup_r[8] = {{ -1, 0, 1,  0 , -1, 0, 1,  0 }};
-    const int movlookup_c[8] = {{  0, 1, 0, -1 , 0,  1, 0, -1 }};
+    const int movlookup_r[8] = {{ -1, 0, 1,  0 }};
+    const int movlookup_c[8] = {{  0, 1, 0, -1 }};
     int oldposctr = 0;
     int oldpos_r[1000];
     int oldpos_c[1000];
@@ -37,9 +37,10 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
             nextpos[0] = currpos[0];
             nextpos[1] = currpos[1];
         }} else {{  // Single Step n times
+            action -= 1;
             while(action > 0){{
-                nextpos[0] = currpos[0] + movlookup_r[action - 1];
-                nextpos[1] = currpos[1] + movlookup_c[action - 1];
+                nextpos[0] = currpos[0] + movlookup_r[action % 4];
+                nextpos[1] = currpos[1] + movlookup_c[action % 4];
 
                 if(nextpos[0] < 0 || nextpos[1] < 0 || nextpos[0] >= {rows} || nextpos[1] >= {cols}){{
                     reward += {WALL_COLLISION_REWARD};
@@ -86,7 +87,7 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
 
 def tensorkernel(rows, cols, view_size, nagents):
     kernel = f""" \
-__global__ void tensor(int *states, int *poss, int *goals, int *field){{
+__global__ void tensor(float *states, int *poss, int *goals, int *field){{
     const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int view_range = {view_size // 2};
@@ -101,10 +102,10 @@ __global__ void tensor(int *states, int *poss, int *goals, int *field){{
         goal[0] = goals[i * 2];
         goal[1] = goals[(i * 2) + 1];
         
-        states[i * statesize + displacement] = (2 * pos[0] / {rows}) + 1;
-        states[i * statesize + displacement + 1] = (2 * pos[1] / {cols}) + 1;
-        states[i * statesize + displacement + 2] = (2 * goal[0] / {rows}) + 1;
-        states[i * statesize + displacement + 3] = (2 * goal[1] / {cols}) + 1;
+        states[i * statesize + displacement] = (2 * ((float)pos[0]) / {rows}) - 1;
+        states[i * statesize + displacement + 1] = (2 * ((float)pos[1]) / {cols}) - 1;
+        states[i * statesize + displacement + 2] = (2 * ((float)goal[0]) / {rows}) - 1;
+        states[i * statesize + displacement + 3] = (2 * ((float)goal[1]) / {cols}) - 1;
         
         // takes chunks of updated fields and updates the nagents receptive fields
         // don't want to break field into sections because obstacles in field aren't represented
@@ -113,9 +114,9 @@ __global__ void tensor(int *states, int *poss, int *goals, int *field){{
             for(int c = 0; c < {view_size}; c++){{
                 int fieldr = pos[0] + r - view_range;
                 int fieldc = pos[1] + c - view_range;
-                int fillval = -1;
-                if(fieldr < 0 || fieldc < 0 || {rows} <= fieldr || {cols} <= fieldc)
-                    fillval = field[fieldr * {cols} + fieldc];
+                float fillval = -1;
+                if(fieldr >= 0 && fieldc >= 0 && fieldr < {rows} && fieldc < {cols})
+                    fillval = (float)field[fieldr * {cols} + fieldc];
                 int stateidx = statesize * i + r * {view_size} + c;
                 states[stateidx] = fillval;
             }}

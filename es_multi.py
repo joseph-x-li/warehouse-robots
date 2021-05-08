@@ -5,7 +5,6 @@ import torch.nn as nn
 torch.set_grad_enabled(False) # important af
 
 def init_weights(m):
-    import pdb; pdb.set_trace()
     if ((type(m) == nn.Linear) | (type(m) == nn.Conv2d)):
         torch.nn.init.xavier_uniform(m.weight)
         m.bias.data.fill_(0.00)
@@ -19,11 +18,12 @@ def createmodel(input_dim, output_dim):
         nn.Linear(256, output_dim)
     )
     model.apply(init_weights)
+    return model
 
 
 def mutate(agent):
     child_agent = copy.deepcopy(agent)
-    mutation_power = 0.02 #hyper-parameter, set from https:/    /arxiv.org/pdf/1712.06567.pdf
+    mutation_power = 0.02 #hyper-parameter, set from https://arxiv.org/pdf/1712.06567.pdf
     for param in child_agent.parameters():
         param += mutation_power * np.random.randn(*(param.shape))
     return child_agent
@@ -59,8 +59,8 @@ def evaluate(agents, nrepeats, envname):
     return scores
 
 def main():
-    AGENTS = 200
-    REPEATS = 16 # number of times to repeat evaluation of an agent
+    AGENTS = 100
+    REPEATS = 32 # number of times to repeat evaluation of an agent
     GENERATIONS = 100
     BEAM_SIZE = 20
     envname = "warehouse_simple_multi"

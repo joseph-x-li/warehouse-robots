@@ -21,7 +21,7 @@ spec = [
 
 @jitclass(spec)
 class State:
-    def __init__(self, nagents, rows, cols, view_size):
+    def __init__(self, nagents, rows, cols, view_size, testing):
         assert view_size % 2 == 1
         self.WALL_COLLISION_REWARD = -1.1
         self.ROBOT_COLLISION_REWARD = -3
@@ -29,13 +29,13 @@ class State:
         self.nagents = nagents
         self.view_size = view_size
         self.rows, self.cols = rows, cols
-        self.poss = self._generate_positions()
-        self.goals = self._generate_positions()
+        self.poss = self._generate_positions(start=testing)
+        self.goals = self._generate_positions(end=testing)
         self.movlookup = np.array(
             [(-1, 0), (0, 1), (1, 0), (0, -1)],  # north  # east  # south  # west
             dtype=np.int32,
         )
-        self.field = np.zeros((rows, cols), dtype=np.int32)
+        self.field = np.zeros((self.rows, self.cols), dtype=np.int32)
         for pos in self.poss:
             self.field[pos[0], pos[1]] = 1
 
@@ -121,7 +121,39 @@ class State:
 
         return view
 
-    def _generate_positions(self):
+    def _generate_positions(self, start=False, end=False):
+        if start:
+            return np.array([
+                    (0, 0),
+                    (1, 0),
+                    (1, 1),
+                    (2, 1),
+                    (0, 2),
+                    (2, 2),
+                    (2, 3),
+                    (2, 4),
+                    (1, 5),
+                    (0, 6),
+                    (2, 6),
+                ], 
+                dtype=np.int32
+            )
+        if end:
+            return np.array([
+                    (6, 0),
+                    (6, 1),
+                    (6, 2),
+                    (6, 3),
+                    (6, 4),
+                    (6, 5),
+                    (1, 3),
+                    (0, 4),
+                    (0, 5),
+                    (0, 6),
+                    (1, 6),
+                ], 
+                dtype=np.int32
+            )
         num_set = set()
         while len(num_set) < self.nagents:
             a, b = random.randint(0, self.rows - 1), random.randint(0, self.cols - 1)
@@ -134,9 +166,10 @@ import time
 
 
 class Gym(GymMock):
-    rows, cols = (1000, 1000)
+    testing = True
+    rows, cols = (11, 11) if testing else (1000, 1000)
     speed_mod = False
-    nagents = 10000
+    nagents = 11 if testing else 10000
     view_size = 11
 
     def __init__(self):
@@ -145,7 +178,7 @@ class Gym(GymMock):
         self.reset()
 
     def reset(self):
-        self.state = State(self.nagents, self.rows, self.cols, self.view_size)
+        self.state = State(self.nagents, self.rows, self.cols, self.view_size, self.testing)
         return self.state.tensor
 
     def step(self, actions):
