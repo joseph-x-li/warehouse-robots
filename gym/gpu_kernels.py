@@ -38,7 +38,7 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
             nextpos[1] = currpos[1];
         }} else {{  // Single Step n times
             action -= 1;
-            while(action > 0){{
+            while(action >= 0){{
                 nextpos[0] = currpos[0] + movlookup_r[action % 4];
                 nextpos[1] = currpos[1] + movlookup_c[action % 4];
 

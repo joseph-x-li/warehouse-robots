@@ -145,7 +145,7 @@ class State:
 class Gym(GymMock):
     testing = True
     rows, cols = (11, 11) if testing else (1000, 1000)
-    speed_mod = False
+    speed_mod = True
     nagents = 11 if testing else 10000
     view_size = 11
 

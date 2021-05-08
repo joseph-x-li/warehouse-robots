@@ -1,5 +1,6 @@
 from .gym_mock import GymMock
 import random
+import time
 import numpy as np
 from numba.experimental import jitclass
 from numba import int32, float32
@@ -39,8 +40,8 @@ class State:
         for pos in self.poss:
             self.field[pos[0], pos[1]] = 1
 
-    def step(self, actions, numba=False):
-        rewards = np.zeros((self.nagents,), dtype=float32)
+    def step(self, actions):
+        rewards = np.zeros((self.nagents,), dtype=np.float32)
         oldpositions = []
         for idx, (action, pos, goal) in enumerate(zip(actions, self.poss, self.goals)):
             reward = 0
@@ -48,8 +49,9 @@ class State:
             if action == 0:
                 nextpos = pos
             else:
-                while(action > 0):
-                    nextpos = pos + self.movlookup[action - 1]
+                action -= 1
+                while(action >= 0):
+                    nextpos = pos + self.movlookup[action % 4]
                     collision_status = self._collision(nextpos)
                     if collision_status == 0:  # no collision
                         pass
@@ -63,7 +65,7 @@ class State:
                     self.field[nextpos[0], nextpos[1]] = 1
                     # adding placeholders for old positions
                     if not np.array_equal(nextpos, pos):
-                        oldpositions.append(pos)
+                        oldpositions.append(pos.copy())
                     # taking multiple steps, need to update current pos to next step pos
                     pos = nextpos
                     action -= 4
@@ -74,7 +76,6 @@ class State:
             if np.array_equal(nextpos, goal):
                 reward += self.GOAL_REWARD
             rewards[idx] = reward
-
         for pos in oldpositions:
             self.field[pos[0], pos[1]] = 0
         return rewards
@@ -162,19 +163,17 @@ class State:
         return np.array(list(num_set), dtype=np.int32)
 
 
-import time
-
 
 class Gym(GymMock):
     testing = True
     rows, cols = (11, 11) if testing else (1000, 1000)
-    speed_mod = False
+    speed_mod = True
     nagents = 11 if testing else 10000
     view_size = 11
 
     def __init__(self):
         action_space_size = 9 if self.speed_mod else 5  # S + (NEWS, 2 * NEWS)
-        super().__init__(action_space_size, (4,))  # mypos, goalpos
+        super().__init__(action_space_size, (4 + (self.view_size ** 2),))
         self.reset()
 
     def reset(self):
