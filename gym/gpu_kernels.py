@@ -52,8 +52,6 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
                     nextpos[1] = currpos[1];
                 }}
                 if(nextpos[0] != currpos[0] || nextpos[1] != currpos[1]){{
-                    poss[i * 2] = nextpos[0];
-                    poss[i * 2 + 1] = nextpos[1];
                     oldpos_r[oldposctr] = currpos[0];
                     oldpos_c[oldposctr] = currpos[1];
                     oldposctr += 1;
@@ -63,6 +61,8 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
                 currpos[1] = nextpos[1];
                 action -= 4;
             }}
+            poss[i * 2] = nextpos[0];
+            poss[i * 2 + 1] = nextpos[1];
         }}
 
         // reward only depends on initial position and end position

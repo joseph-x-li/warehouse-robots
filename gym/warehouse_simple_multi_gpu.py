@@ -50,13 +50,14 @@ class State:
                 self.nagents
             )
 
-    def step(self, actions):
+    def step(self, actions, timing):
         rewards = np.zeros((self.nagents,), dtype=np.float32)
-        start = cuda.Event()
-        end = cuda.Event()
         hold1 = cuda.Out(rewards)
         hold2 = cuda.In(actions)
-        start.record()
+        if timing:
+            start = cuda.Event()
+            end = cuda.Event()
+            start.record()
         self.step_gpu(
             hold1,
             hold2,
@@ -66,18 +67,19 @@ class State:
             block=(1024, 1, 1),
             grid=(1, 1, 1),
         )
-        end.record()
-        end.synchronize()
-        print("[GPU]\t[STEP]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
+        if timing:
+            end.record()
+            end.synchronize()
+            print("[GPU]\t[STEP]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
         return rewards
 
-    @property
-    def tensor(self):
+    def tensor(self, timing):
         states = np.zeros((self.nagents, self.view_size ** 2 + 4), dtype=np.float32)
-        start = cuda.Event()
-        end = cuda.Event()
         hold1 = cuda.Out(states)
-        start.record()
+        if timing:
+            start = cuda.Event()
+            end = cuda.Event()
+            start.record()
         self.tensor_gpu(
             hold1,
             self.poss_gpu,
@@ -86,9 +88,10 @@ class State:
             block=(1024, 1, 1),
             grid=(1, 1, 1),
         )
-        end.record()
-        end.synchronize()
-        print("[GPU]\t[TSR]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
+        if timing:
+            end.record()
+            end.synchronize()
+            print("[GPU]\t[TSR]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
         return states
 
     def _generate_positions(self, start=False, end=False):
@@ -143,10 +146,10 @@ class State:
 
 
 class Gym(GymMock):
-    testing = True
+    testing = False
     rows, cols = (11, 11) if testing else (1000, 1000)
     speed_mod = True
-    nagents = 11 if testing else 10000
+    nagents = 11 if testing else 1000
     view_size = 11
 
     def __init__(self):
@@ -156,17 +159,22 @@ class Gym(GymMock):
         )  # mypos, goalpos, receptive field
         self.reset()
 
-    def reset(self):
+    def reset(self, timing=False):
         self.state = State(self.nagents, self.rows, self.cols, self.view_size, self.testing)
-        return self.state.tensor
+        return self.state.tensor(timing)
 
-    def step(self, actions):
-        start = time.time()
-        rewards = self.state.step(actions)
-        print(
-            "[GPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000)
-        )
-        start = time.time()
-        tsr = self.state.tensor
-        print("[GPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
-        return tsr, rewards, False, None
+    def step(self, actions, timing=False):
+        if timing:
+            start = time.time()
+            rewards = self.state.step(actions, timing)
+            print(
+                "[GPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000)
+            )
+            start = time.time()
+            tsr = self.state.tensor(timing)
+            print("[GPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
+            return tsr, rewards, False, None
+        else:
+            rewards = self.state.step(actions, timing)
+            tsr = self.state.tensor(timing)
+            return tsr, rewards, False, None

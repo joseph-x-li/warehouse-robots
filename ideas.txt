@@ -7,5 +7,6 @@ Add loop/multiple steps to sequential version :))
 
 Compare correctness for both kernels
 Finish evolution training shit
+https://arxiv.org/pdf/1712.06567.pdf
 Parallel environments for GPU kernels (run n fields at one time in a kernel)
 WRITE REPORT AND CALL IT A FUCKING YEAR

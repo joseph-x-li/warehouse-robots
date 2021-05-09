@@ -165,10 +165,10 @@ class State:
 
 
 class Gym(GymMock):
-    testing = True
-    rows, cols = (11, 11) if testing else (1000, 1000)
+    testing = False
+    rows, cols = (11, 11) if testing else (100, 100)
     speed_mod = True
-    nagents = 11 if testing else 10000
+    nagents = 11 if testing else 1000
     view_size = 11
 
     def __init__(self):
@@ -180,13 +180,18 @@ class Gym(GymMock):
         self.state = State(self.nagents, self.rows, self.cols, self.view_size, self.testing)
         return self.state.tensor
 
-    def step(self, actions):
-        start = time.time()
-        rewards = self.state.step(actions)
-        print(
-            "[CPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000)
-        )
-        start = time.time()
-        tsr = self.state.tensor
-        print("[CPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
-        return tsr, rewards, False, None
+    def step(self, actions, timing=False):
+        if timing:
+            start = time.time()
+            rewards = self.state.step(actions)
+            print(
+                "[CPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000)
+            )
+            start = time.time()
+            tsr = self.state.tensor
+            print("[CPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
+            return tsr, rewards, False, None
+        else:
+            rewards = self.state.step(actions)
+            tsr = self.state.tensor
+            return tsr, rewards, False, None
