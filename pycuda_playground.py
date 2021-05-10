@@ -8,22 +8,59 @@ print(dd.shared_memory)
 print(dd.max_threads)
 print(dir(dd))
 
-rows = 10
-cols = 10 
-nagents = 10
+rows = 1000
+cols = 1000
+nagents = 10000
 WALL_COLLISION_REWARD = -1.1 
 ROBOT_COLLISION_REWARD = -3
 GOAL_REWARD = 2
 view_size = 11
-binwidth = 11
+binwidth = 100
 binr = ceil(rows / binwidth)
 binc = ceil(cols / binwidth)
 nbins = binr * binc
 
+def findNextPowerOf2(n):
+    n = n - 1
+    while n & n - 1: n = n & n - 1 
+    return n << 1
+nbins_rounded = findNextPowerOf2(nbins)
+
 
 kernel = f""" \
-__global__ void tensor(float *states, int *poss, int *goals, int *field){{
-    __shared__ int bincounters[{nbins}];
+__device__ __inline__ void exclusiveScan(int length, int *array) {{
+    const int threadidx = threadIdx.x;
+    // upsweep
+    for (int step = 1; step < length; step *= 2) {{
+        // based on step, compute the position of the two active elements
+        int idxA = (step - 1) + (2 * step * threadidx);
+        int idxB = idxA + step;
+        if(idxB < length) {{
+            array[idxB] += array[idxA];
+        }}
+        __syncthreads();
+    }}
+    if(threadidx == 0){{ array[length - 1] = 0; }}
+    __syncthreads();
+    // downsweep
+    for (int step = length/2; step >= 1; step /= 2) {{
+        // based on step, compute the position of the two active elements
+        int idxA = (step - 1) + (2 * step * threadidx);
+        int idxB = idxA + step;
+        if(idxB < length) {{
+            int hold = array[idxB];
+            array[idxB] += array[idxA];
+            array[idxA] = hold;
+        }}
+        __syncthreads();
+    }}
+}}
+
+__global__ void tensor(float *states, int *poss, int *goals){{
+    __shared__ int bincounters[{nbins_rounded}];
+    __shared__ unsigned short bins[{nagents}][2];
+    // MAX SHARED MEMORY: 49152 BYTES
+
     const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int blockidx = blockIdx.x;
@@ -33,31 +70,62 @@ __global__ void tensor(float *states, int *poss, int *goals, int *field){{
     const int displacement = {view_size ** 2};
     const int statesize = {view_size ** 2 + 4};
 
-    int myposs[100][2];
-    int mygoals[100][2];
 
-    int start = blockidx * nthreads + threadidx;
-    int step = nblocks * nthreads;
-
-    for(int i = start; i < {nbins}; i += step){{
+    int start = threadidx;
+    int step = nthreads;
+    
+    for(int i = start; i < {nbins_rounded}; i += step){{
         bincounters[i] = 0;
     }}
     __syncthreads();
 
+    // For positions this thread is responsible for, 
+    // determine its bin index
+    // increment that bin counter
+    // remeber its place in that bin and its bin assignment
+    int localctr = 0;   // counts loop iterations to index into myposs
+    int myposs[100][4]; // positions I am responsible for 
+    int goal[2];        // goal value holder
     for(int i = start; i < {nagents}; i += step){{
-        pos[0] = poss[i * 2];
-        pos[1] = poss[(i * 2) + 1];
+        myposs[localctr][0] = poss[i * 2];
+        myposs[localctr][1] = poss[(i * 2) + 1];
         goal[0] = goals[i * 2];
         goal[1] = goals[(i * 2) + 1];
-        states[i * statesize + displacement] = (2 * ((float)pos[0]) / {rows}) - 1;
-        states[i * statesize + displacement + 1] = (2 * ((float)pos[1]) / {cols}) - 1;
+        states[i * statesize + displacement] = (2 * ((float)myposs[localctr][0]) / {rows}) - 1;
+        states[i * statesize + displacement + 1] = (2 * ((float)myposs[localctr][1]) / {cols}) - 1;
         states[i * statesize + displacement + 2] = (2 * ((float)goal[0]) / {rows}) - 1;
         states[i * statesize + displacement + 3] = (2 * ((float)goal[1]) / {cols}) - 1;
-        int mybin = (pos[0] / {binwidth}) *  + ;
-        atomicAdd(&(bincounters[mybin]), 1);
+        int bin_idx = (myposs[localctr][0] / {binwidth}) * {binc} + (myposs[localctr][1] / {binwidth});
+        int bin_pos = atomicAdd(&(bincounters[bin_idx]), 1);
+        myposs[localctr][2] = bin_idx;
+        myposs[localctr][3] = bin_pos;
+        localctr++;
+    }}
+    __syncthreads();
+
+    // Perform parallel exlusive scan to accumulate bin sizes so we can index into bins
+    exclusiveScan({nbins_rounded}, bincounters);
+
+    // Populate bins with the agent positions I am responsible for
+    for(int i = 0; i < localctr; i++){{
+        int bin_idx = myposs[i][2];
+        int bin_pos = myposs[i][3];
+        int binsidx = bincounters[bin_idx] + bin_pos;
+        bins[binsidx][0] = (unsigned short) myposs[i][0];
+        bins[binsidx][1] = (unsigned short) myposs[i][1];
+    }}
+    __syncthreads();
+
+    // Render rest of state for agent positions I am responsible for
+    for(int i = 0; i < localctr; i++){{
+        int bin_idx = myposs[i][2];
+        int bin_pos = myposs[i][3];
+        int binsidx = bincounters[bin_idx] + bin_pos;
+        bins[binsidx][0] = (unsigned short) myposs[i][0];
+        bins[binsidx][1] = (unsigned short) myposs[i][1];
     }}
 }}"""
 print(kernel)
 
-mod = SourceModule(kernel, no_extern_c=True)
+mod = SourceModule(kernel)
 step = mod.get_function("tensor")
