@@ -1,3 +1,4 @@
+#!/home/jet/miniforge3/envs/py36_torch/bin/python3.6
 import gym
 import numpy as np
 
@@ -9,8 +10,8 @@ import numpy as np
 cpuenv = gym.make("warehouse_simple_multi")
 gpuenv = gym.make("warehouse_simple_multi_gpu")
 
-cpustate = cpuenv.reset()
-gpustate = gpuenv.reset()
+cpustate = cpuenv.reset(testing=True)
+gpustate = gpuenv.reset(testing=True)
 assert np.allclose(cpustate, gpustate)
 
 action1 = np.zeros((11,), dtype=np.int32)

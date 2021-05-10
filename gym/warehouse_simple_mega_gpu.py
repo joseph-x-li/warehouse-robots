@@ -17,16 +17,24 @@ class State:
     step_gpu = None
     tensor_gpu = None
 
-    def __init__(self, nagents, rows, cols, view_size, testing):
+    def __init__(self, nenv, nagents, rows, cols, view_size, testing):
         assert view_size % 2 == 1
+        self.nenv = nenv
         self.nagents = nagents
         self.view_size = view_size
         self.rows, self.cols = rows, cols
-        poss = self._generate_positions(start=testing)
-        goals = self._generate_positions(end=testing)
-        field = np.zeros((self.rows, self.cols), dtype=np.int32)
-        for pos in poss:
-            field[tuple(pos)] = 1
+        poss, goals, field = [], [], []
+        for _ in range(self.nenv):
+            p, g = self._generate_positions(start=testing), self._generate_positions(
+                start=testing
+            )
+            f = np.zeros((self.rows, self.cols), dtype=np.int32)
+            for pos in poss:
+                f[tuple(pos)] = 1
+            poss.append(p)
+            goals.append(g)
+            field.append(f)
+        poss, goals, field = np.vstack(poss), np.vstack(goals), np.vstack(field)
         self.poss_gpu = cuda.mem_alloc(poss.nbytes)
         self.goals_gpu = cuda.mem_alloc(goals.nbytes)
         self.field_gpu = cuda.mem_alloc(field.nbytes)
@@ -62,14 +70,13 @@ class State:
             self.poss_gpu,
             self.goals_gpu,
             self.field_gpu,
-            block=(256, 1, 1),
-            grid=(8, 1, 1),
+            block=(1024, 1, 1),
+            grid=(1, 1, 1),
         )
         if timing:
             end.record()
             end.synchronize()
-            delta = start.time_till(end)
-            print("[GPU]\t[STEP]\t[KRNL]\t(ms): {:.4f}".format(delta))
+            print("[GPU]\t[STEP]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
         return rewards
 
     def tensor(self, timing):
@@ -84,14 +91,13 @@ class State:
             self.poss_gpu,
             self.goals_gpu,
             self.field_gpu,
-            block=(256, 1, 1),
-            grid=(8, 1, 1),
+            block=(1024, 1, 1),
+            grid=(1, 1, 1),
         )
         if timing:
             end.record()
             end.synchronize()
-            delta = start.time_till(end)
-            print("[GPU]\t[TSR]\t[KRNL]\t(ms): {:.4f}".format(delta))
+            print("[GPU]\t[TSR]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
         return states
 
     def _generate_positions(self, start=False, end=False):
@@ -148,24 +154,23 @@ class State:
 
 
 class Gym(GymMock):
-    rows, cols = 1000, 1000
-    nagents = 10000
+    testing = False
+    rows, cols = (11, 11) if testing else (1000, 1000)
+    speed_mod = True
+    nagents = 11 if testing else 1000
     view_size = 11
 
     def __init__(self):
-        action_space_size = 9
+        action_space_size = 9 if self.speed_mod else 5  # S + (NEWS, 2 * NEWS)
         super().__init__(
             action_space_size, (4 + (self.view_size ** 2),)
         )  # mypos, goalpos, receptive field
-        self.reset()
+        # self.reset()
 
-    def reset(self, timing=False, testing=False):
-        if testing:
-            self.state = State(11, 11, 11, 11, testing)
-        else:
-            self.state = State(
-                self.nagents, self.rows, self.cols, self.view_size, testing
-            )
+    def reset(self, nenv, timing=False):
+        self.state = State(
+            nenv, self.nagents, self.rows, self.cols, self.view_size, self.testing
+        )
         return self.state.tensor(timing)
 
     def step(self, actions, timing=False):

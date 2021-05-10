@@ -93,7 +93,64 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
 
 
 def tensorkernel(rows, cols, view_size, nagents):
-    kernel = f""" \
+    kernel1 = f""" \
+__global__ void tensor(float *states, int *poss, int *goals, int *field){{
+    const int threadidx = threadIdx.x;
+    const int nthreads = blockDim.x;
+    const int blockidx = blockIdx.x;
+    const int nblocks = gridDim.x;
+
+    const int view_range = {view_size // 2};
+    const int displacement = {view_size ** 2};
+    const int statesize = {view_size ** 2 + 4};
+
+    float tmpstate[statesize];
+    int pos[2];
+    int goal[2];
+
+    int start = blockidx * nthreads + threadidx;
+    int step = nblocks * nthreads;
+
+    for(int i = start; i < {nagents}; i += step){{
+        pos[0] = poss[i * 2];
+        pos[1] = poss[(i * 2) + 1];
+        goal[0] = goals[i * 2];
+        goal[1] = goals[(i * 2) + 1];
+
+        tmpstate[displacement] = (2 * ((float)pos[0]) / {rows}) - 1;
+        tmpstate[displacement + 1] = (2 * ((float)pos[1]) / {cols}) - 1;
+        tmpstate[displacement + 2] = (2 * ((float)goal[0]) / {rows}) - 1;
+        tmpstate[displacement + 3] = (2 * ((float)goal[1]) / {cols}) - 1;
+        
+        // states[i * statesize + displacement] = (2 * ((float)pos[0]) / {rows}) - 1;
+        // states[i * statesize + displacement + 1] = (2 * ((float)pos[1]) / {cols}) - 1;
+        // states[i * statesize + displacement + 2] = (2 * ((float)goal[0]) / {rows}) - 1;
+        // states[i * statesize + displacement + 3] = (2 * ((float)goal[1]) / {cols}) - 1;
+        
+        // takes chunks of updated fields and updates the nagents receptive fields
+        // don't want to break field into sections because obstacles in field aren't represented
+        // accurately in pos
+        for(int r = 0; r < {view_size}; r++){{
+            for(int c = 0; c < {view_size}; c++){{
+                int fieldr = pos[0] + r - view_range;
+                int fieldc = pos[1] + c - view_range;
+                float fillval = -1;
+                if(fieldr >= 0 && fieldc >= 0 && fieldr < {rows} && fieldc < {cols})
+                    fillval = (float)field[fieldr * {cols} + fieldc];
+                tmpstate[r * {view_size} + c] = fillval;
+                // int stateidx = statesize * i + r * {view_size} + c;
+                // states[stateidx] = fillval;
+            }}
+        }}
+
+        __syncthreads();
+
+        for(int j = 0; j < statesize; j++) {{
+            states[statesize * i + j] = tmpstate[j];
+        }}
+    }}
+}}"""
+    kernel2 = f""" \
 __global__ void tensor(float *states, int *poss, int *goals, int *field){{
     const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
@@ -137,4 +194,4 @@ __global__ void tensor(float *states, int *poss, int *goals, int *field){{
         }}
     }}
 }}"""
-    return SourceModule(kernel).get_function("tensor")
+    return SourceModule(kernel1).get_function("tensor")

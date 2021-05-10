@@ -5,8 +5,14 @@ create a "WIDE" environment (takes in multiple states, many actions, does it all
 Finish "double step" action thing for kernels :))
 Add loop/multiple steps to sequential version :))
 
-Compare correctness for both kernels
-Finish evolution training shit
-https://arxiv.org/pdf/1712.06567.pdf
+Compare correctness for both kernels :))
+Finish evolution training shit (https://arxiv.org/pdf/1712.06567.pdf) :))
+ideas: local buffer for stepping (finished, but no significant improvement) :))
+
+Weird sorting thing (for tensor kernel)
+https://on-demand.gputechconf.com/gtc/2014/presentations/S4117-fast-fixed-radius-nearest-neighbor-gpu.pdf
+
 Parallel environments for GPU kernels (run n fields at one time in a kernel)
+
+
 WRITE REPORT AND CALL IT A FUCKING YEAR

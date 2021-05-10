@@ -50,7 +50,7 @@ class State:
                 nextpos = pos
             else:
                 action -= 1
-                while(action >= 0):
+                while action >= 0:
                     nextpos = pos + self.movlookup[action % 4]
                     collision_status = self._collision(nextpos)
                     if collision_status == 0:  # no collision
@@ -124,7 +124,8 @@ class State:
 
     def _generate_positions(self, start=False, end=False):
         if start:
-            return np.array([
+            return np.array(
+                [
                     (0, 0),
                     (1, 0),
                     (1, 1),
@@ -136,11 +137,12 @@ class State:
                     (1, 5),
                     (0, 6),
                     (2, 6),
-                ], 
-                dtype=np.int32
+                ],
+                dtype=np.int32,
             )
         if end:
-            return np.array([
+            return np.array(
+                [
                     (6, 0),
                     (6, 1),
                     (6, 2),
@@ -152,8 +154,8 @@ class State:
                     (0, 5),
                     (0, 6),
                     (1, 6),
-                ], 
-                dtype=np.int32
+                ],
+                dtype=np.int32,
             )
         num_set = set()
         while len(num_set) < self.nagents:
@@ -163,21 +165,23 @@ class State:
         return np.array(list(num_set), dtype=np.int32)
 
 
-
 class Gym(GymMock):
-    testing = False
-    rows, cols = (11, 11) if testing else (100, 100)
-    speed_mod = True
-    nagents = 11 if testing else 1000
+    rows, cols = (1000, 1000)
+    nagents = 10000
     view_size = 11
 
     def __init__(self):
-        action_space_size = 9 if self.speed_mod else 5  # S + (NEWS, 2 * NEWS)
+        action_space_size = 9
         super().__init__(action_space_size, (4 + (self.view_size ** 2),))
         self.reset()
 
-    def reset(self):
-        self.state = State(self.nagents, self.rows, self.cols, self.view_size, self.testing)
+    def reset(self, testing=False):
+        if testing:
+            self.state = State(11, 11, 11, 11, testing)
+        else:
+            self.state = State(
+                self.nagents, self.rows, self.cols, self.view_size, testing
+            )
         return self.state.tensor
 
     def step(self, actions, timing=False):
@@ -185,11 +189,17 @@ class Gym(GymMock):
             start = time.time()
             rewards = self.state.step(actions)
             print(
-                "[CPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000)
+                "[CPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format(
+                    (time.time() - start) * 1000
+                )
             )
             start = time.time()
             tsr = self.state.tensor
-            print("[CPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format((time.time() - start) * 1000))
+            print(
+                "[CPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format(
+                    (time.time() - start) * 1000
+                )
+            )
             return tsr, rewards, False, None
         else:
             rewards = self.state.step(actions)
