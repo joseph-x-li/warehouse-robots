@@ -5,7 +5,7 @@ import numpy as np
 
 # pos, goals, field = gpumenv.state.copy_gpu_data()
 # pos, goals, field = gpuenv.state.copy_gpu_data()
-# pos, goals, field = cpuenv.state.poss, cpuenv.state.goals, cpuenv.state.field
+# cpos, cgoals, cfield = cpuenv.state.poss, cpuenv.state.goals, cpuenv.state.field
 # gpustate[0][:-4].astype(np.int32).reshape((11,11))
 # gpumstate[0][:-4].astype(np.int32).reshape((11,11))
 # cpustate[0][:-4].astype(np.int32).reshape((11,11))
@@ -40,7 +40,7 @@ actions = [
     action1, action2, action2
 ]
 
-for action in actions:
+for i, action in enumerate(actions):
     cpustate, cpurewards, _, _ = cpuenv.step(action)
     gpustate, gpurewards, _, _ = gpuenv.step(action)
     gpumstate, gpumrewards, _, _ = gpumenv.step(np.tile(action, (11,)))

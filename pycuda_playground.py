@@ -56,21 +56,23 @@ __device__ __inline__ void exclusiveScan(int length, int *array) {{
     }}
 }}
 
-__global__ void tensor(float *states, int *poss, int *goals){{
+__global__ void tensor(float *all_states, int *all_poss, int *all_goals){{
+    // MAX SHARED MEMORY: 49152 BYTES
     __shared__ int bincounters[{nbins_rounded}];  // index i is number of agents in bin i
     __shared__ int binpfx[{nbins_rounded}];       // prefix sums of the above (starts from 0)
     __shared__ unsigned short bins[{nagents}][2]; // where the agent locations will actually be stored
-    // MAX SHARED MEMORY: 49152 BYTES
 
     const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
-    // const int blockidx = blockIdx.x;
-    // const int nblocks = gridDim.x;
-
+    const int blockidx = blockIdx.x;
+    
     const int view_range = {view_size // 2};
     const int displacement = {view_size ** 2};
     const int statesize = {view_size ** 2 + 4};
 
+    float *states = &(all_states[blockidx * {nagents} * statesize]);
+    int *poss = &(all_poss[blockidx * {nagents * 2}]);
+    int *goals = &(all_goals[blockidx * {nagents * 2}]);
 
     int start = threadidx;
     int step = nthreads;
@@ -84,7 +86,7 @@ __global__ void tensor(float *states, int *poss, int *goals){{
     // For positions this thread is responsible for, 
     // determine its bin index
     // increment that bin counter
-    // remeber its place in that bin and its bin assignment
+    // remember its place in that bin and its bin assignment
     int localctr = 0;   // counts loop iterations to index into myposs
     int myposs[100][5]; // positions I am responsible for [0, 1] = r, c; [2, 3] = bin_idx, bin_pos; [4] = index in poss
     int goal[2];        // goal value holder
@@ -125,7 +127,7 @@ __global__ void tensor(float *states, int *poss, int *goals){{
 
     // Render rest of state for agent positions I am responsible for
     for(int i = 0; i < localctr; i++){{
-        // load my position
+        // load my position in field
         int myr = myposs[i][0];
         int myc = myposs[i][1];
 
@@ -140,19 +142,29 @@ __global__ void tensor(float *states, int *poss, int *goals){{
             for(int binc = TLC; binr <= BRC; binc++){{
                 int bin_idx = binr * {binc} + binc;
                 for(int binsidx = binpfx[bin_idx]; binsidx < binpfx[bin_idx] + bincounters[bin_idx]; binsidx++){{
-                    int otherr = (int)(bins[binsidx][0]);
-                    int otherc = (int)(bins[binsidx][1]);
-                    int fieldr = otherr - myr + view_range;
-                    int fieldc = otherc - myc + view_range;
+                    int otherr = (int)(bins[binsidx][0]); // location in field
+                    int otherc = (int)(bins[binsidx][1]); 
+                    int viewr = otherr - myr + view_range;
+                    int viewc = otherc - myc + view_range;
                     // If if statement passes, then other agent is in view range.
-                    if(0 <= fieldr && fieldr < {view_size} && 0 <= fieldc && fieldc < {view_size}){{ 
-                        states[fieldr * {view_size} + fieldc] = 1.0;
+                    if(0 <= viewr && viewr < {view_size} && 0 <= viewc && viewc < {view_size}){{ 
+                        states[viewr * {view_size} + viewc] = 1.0;
                     }}
                 }}
             }}
         }}
 
         // Render -1 for walls
+        for(int viewr = 0; viewr < {view_size}; viewr++){{
+            for(int viewc = 0; viewc < {view_size}; viewc++){{
+                int fieldr = myr + viewr - view_range;
+                int fieldc = myc + viewc - view_range;
+                if(fieldr < 0 || fieldc < 0 || fieldr >= {rows} || fieldc >= {cols}){{
+                    int stateidx = statesize * i + viewr * {view_size} + viewc;
+                    states[stateidx] = -1;
+                }}
+            }}
+        }}
     }}
 }}"""
 print(kernel)

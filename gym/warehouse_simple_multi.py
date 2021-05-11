@@ -167,7 +167,7 @@ class State:
 
 class Gym(GymMock):
     rows, cols = 1000, 1000
-    nagents = 10000
+    nagents = 5000
     view_size = 11
 
     def __init__(self):

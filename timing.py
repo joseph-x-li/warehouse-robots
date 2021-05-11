@@ -7,22 +7,22 @@ from tqdm import trange
 
 # def timeenv(name):
 #     env = gym.make(name)
+#     env.reset()
 #     n_actions = env.action_space.n
 #     start = time.time()
 #     for action in range(n_actions):
 #         env.step(action)
-#     delta = time.time() - start
-#     print(f"Env: {name}\nTotal Time: {delta}\nAverge/Step: {delta/n_actions}\n")
 
-def timeenv_multi(name):
+def timeenv_multi(name, timing):
     env = gym.make(name)
+    env.reset()
     n_actions = env.action_space.n
     n_agents = env.nagents
     actions = np.random.randint(0, n_actions, size=(n_actions, n_agents), dtype=np.int32)
     for action in actions:
-        env.step(action, timing=False)
+        env.step(action, timing=timing)
 
-def timeenv_mega(name):
+def timeenv_mega(name, timing):
     nenv = gym.make(name)
     numenv = 12
     nenv.reset(numenv) #make 12 env
@@ -30,9 +30,9 @@ def timeenv_mega(name):
     n_agents = nenv.nagents
     actions = np.random.randint(0, n_actions, size=(n_actions, n_agents * numenv), dtype=np.int32)
     for action in actions:
-        nenv.step(action, timing=True)
+        nenv.step(action, timing=timing)
 
-timeenv_mega("warehouse_simple_mega_gpu")
-# for _ in trange(100):
-#     timeenv_multi("warehouse_simple_multi_gpu")
-# timeenv_multi("warehouse_simple_multi")
+for _ in trange(100):
+    # timeenv_multi("warehouse_simple_multi", True)
+    # timeenv_multi("warehouse_simple_multi_gpu", False)
+    timeenv_mega("warehouse_simple_mega_gpu", False)
