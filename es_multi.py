@@ -33,10 +33,6 @@ def mutate(agent):
         param += mutation_power * torch.randn(param.shape, device=device, dtype=param.dtype)
     return child_agent
 
-def createagents(nagents, input_dim, output_dim):
-    agents = [createmodel(input_dim, output_dim) for _ in range(nagents)]
-    return agents
-
 def _evaluate_agent(agent, envname):
     # return a pyint
     env = gym.make(envname)
@@ -88,10 +84,10 @@ def evaluate(nrepeats, envname, agent):
 
 def simplegenetic(psi, phi, F, F2, N, T, C, G):
     """
-    psi: mutation function
-    phi: initialization function
+    psi: agent mutation function
+    phi: single agent initialization function
     F: fitness function
-    F: fitness function for elites
+    F: fitness function for elites (loaded with a different number of repeats)
     N: population size
     T: number of selected individuals (beam size)
     C: number of candidate elites per generation
