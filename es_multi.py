@@ -37,10 +37,29 @@ def createagents(nagents, input_dim, output_dim):
     agents = [createmodel(input_dim, output_dim) for _ in range(nagents)]
     return agents
 
-def _evaluate_agent_cpu(agent, envname):
+def _evaluate_agent(agent, envname):
     # return a pyint
     env = gym.make(envname)
     observations = env.reset()
+    total_reward = 0
+    for _ in trange(300, desc="Env Stepping", leave=False):
+        inp = torch.tensor(observations).to(device)
+        output_probabilities = agent(inp).cpu().numpy()
+        cdf = np.cumsum(output_probabilities, axis=1)
+        rndselect = np.random.uniform(size=(cdf.shape[0],1))
+        actions = np.sum(rndselect < cdf, axis=1)
+        new_observations, rewards, done, _ = env.step(actions)
+        total_reward += rewards.sum()
+        observations = new_observations
+        if(done):
+            break
+
+    return total_reward
+
+def _evaluate_agent_mega(agent, envname, nrepeats):
+    # return a pyint
+    env = gym.make(envname)
+    observations = env.reset(nrepeats)
     total_reward = 0
     for _ in trange(300, desc="Env Stepping", leave=False):
         inp = torch.tensor(observations).to(device)
@@ -60,11 +79,12 @@ def evaluate(nrepeats, envname, agent):
     """
     Evaluate an agent (ONE MODEL) in envname nrepeats number of times
     """
-    # if "gpu" in envname:
-    #     raise NotImplementedError()
-    # else:
-    agent_score = [_evaluate_agent_cpu(agent, envname) for _ in trange(nrepeats, desc="Repeat Evals", leave=False)]
-    return sum(agent_score) / len(agent_score)
+    if "mega" in envname:
+        agent_score = _evaluate_agent_mega(agent, envname, nrepeats) / nrepeats
+        return agent_score
+    else:
+        agent_score = [_evaluate_agent(agent, envname) for _ in trange(nrepeats, desc="Repeat Evals", leave=False)]
+        return sum(agent_score) / len(agent_score)
 
 def simplegenetic(psi, phi, F, F2, N, T, C, G):
     """
@@ -119,7 +139,9 @@ def main():
     CANDIDATE_ELITES = 5
     GENERATIONS = 100
     BEAM_SIZE = 10
-    ENVNAME = "warehouse_simple_multi_gpu"
+    ENVNAME = "warehouse_simple_multi"
+    # ENVNAME = "warehouse_simple_multi_gpu"
+    # ENVNAME = "warehouse_simple_mega_gpu"
 
     _hold = gym.make(ENVNAME)
     _createmodel = partial(createmodel, _hold.observation_space.shape, _hold.action_space.n)
