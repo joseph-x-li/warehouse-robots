@@ -22,6 +22,17 @@ def timeenv_multi(name):
     for action in actions:
         env.step(action, timing=False)
 
-for _ in trange(100):
-    timeenv_multi("warehouse_simple_multi_gpu")
+def timeenv_mega(name):
+    nenv = gym.make(name)
+    numenv = 12
+    nenv.reset(numenv) #make 12 env
+    n_actions = nenv.action_space.n
+    n_agents = nenv.nagents
+    actions = np.random.randint(0, n_actions, size=(n_actions, n_agents * numenv), dtype=np.int32)
+    for action in actions:
+        nenv.step(action, timing=True)
+
+timeenv_mega("warehouse_simple_mega_gpu")
+# for _ in trange(100):
+#     timeenv_multi("warehouse_simple_multi_gpu")
 # timeenv_multi("warehouse_simple_multi")

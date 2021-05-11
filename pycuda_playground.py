@@ -1,7 +1,6 @@
 import pycuda.autoinit
 from pycuda.compiler import SourceModule
 from pycuda.tools import DeviceData
-from math import ceil
 
 dd = DeviceData()
 print(dd.shared_memory)
@@ -16,6 +15,7 @@ ROBOT_COLLISION_REWARD = -3
 GOAL_REWARD = 2
 view_size = 11
 binwidth = 100
+from math import ceil
 binr = ceil(rows / binwidth)
 binc = ceil(cols / binwidth)
 nbins = binr * binc
@@ -57,14 +57,15 @@ __device__ __inline__ void exclusiveScan(int length, int *array) {{
 }}
 
 __global__ void tensor(float *states, int *poss, int *goals){{
-    __shared__ int bincounters[{nbins_rounded}];
-    __shared__ unsigned short bins[{nagents}][2];
+    __shared__ int bincounters[{nbins_rounded}];  // index i is number of agents in bin i
+    __shared__ int binpfx[{nbins_rounded}];       // prefix sums of the above (starts from 0)
+    __shared__ unsigned short bins[{nagents}][2]; // where the agent locations will actually be stored
     // MAX SHARED MEMORY: 49152 BYTES
 
     const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
-    const int blockidx = blockIdx.x;
-    const int nblocks = gridDim.x;
+    // const int blockidx = blockIdx.x;
+    // const int nblocks = gridDim.x;
 
     const int view_range = {view_size // 2};
     const int displacement = {view_size ** 2};
@@ -76,6 +77,7 @@ __global__ void tensor(float *states, int *poss, int *goals){{
     
     for(int i = start; i < {nbins_rounded}; i += step){{
         bincounters[i] = 0;
+        binpfx[i] = 0;
     }}
     __syncthreads();
 
@@ -84,7 +86,7 @@ __global__ void tensor(float *states, int *poss, int *goals){{
     // increment that bin counter
     // remeber its place in that bin and its bin assignment
     int localctr = 0;   // counts loop iterations to index into myposs
-    int myposs[100][4]; // positions I am responsible for 
+    int myposs[100][5]; // positions I am responsible for [0, 1] = r, c; [2, 3] = bin_idx, bin_pos; [4] = index in poss
     int goal[2];        // goal value holder
     for(int i = start; i < {nagents}; i += step){{
         myposs[localctr][0] = poss[i * 2];
@@ -99,18 +101,23 @@ __global__ void tensor(float *states, int *poss, int *goals){{
         int bin_pos = atomicAdd(&(bincounters[bin_idx]), 1);
         myposs[localctr][2] = bin_idx;
         myposs[localctr][3] = bin_pos;
+        myposs[localctr][4] = i;
         localctr++;
     }}
     __syncthreads();
 
     // Perform parallel exlusive scan to accumulate bin sizes so we can index into bins
-    exclusiveScan({nbins_rounded}, bincounters);
+    for(int i = start; i < {nbins_rounded}; i += step){{
+        binpfx[i] = bincounters[i];
+    }}
+    __syncthreads();
+    exclusiveScan({nbins_rounded}, binpfx);
 
     // Populate bins with the agent positions I am responsible for
     for(int i = 0; i < localctr; i++){{
         int bin_idx = myposs[i][2];
         int bin_pos = myposs[i][3];
-        int binsidx = bincounters[bin_idx] + bin_pos;
+        int binsidx = binpfx[bin_idx] + bin_pos;
         bins[binsidx][0] = (unsigned short) myposs[i][0];
         bins[binsidx][1] = (unsigned short) myposs[i][1];
     }}
@@ -118,11 +125,34 @@ __global__ void tensor(float *states, int *poss, int *goals){{
 
     // Render rest of state for agent positions I am responsible for
     for(int i = 0; i < localctr; i++){{
-        int bin_idx = myposs[i][2];
-        int bin_pos = myposs[i][3];
-        int binsidx = bincounters[bin_idx] + bin_pos;
-        bins[binsidx][0] = (unsigned short) myposs[i][0];
-        bins[binsidx][1] = (unsigned short) myposs[i][1];
+        // load my position
+        int myr = myposs[i][0];
+        int myc = myposs[i][1];
+
+        // Determine receptive field overlap with bins
+        int TLR = max(0, (myr - view_range) / {binwidth});
+        int TLC = max(0, (myc - view_range) / {binwidth});
+        int BRR = min({binr - 1}, (myr + view_range) / {binwidth});
+        int BRC = min({binc - 1}, (myc + view_range) / {binwidth});
+
+        // Iterate over each agent in all possible bins
+        for(int binr = TLR; binr <= BRR; binr++){{
+            for(int binc = TLC; binr <= BRC; binc++){{
+                int bin_idx = binr * {binc} + binc;
+                for(int binsidx = binpfx[bin_idx]; binsidx < binpfx[bin_idx] + bincounters[bin_idx]; binsidx++){{
+                    int otherr = (int)(bins[binsidx][0]);
+                    int otherc = (int)(bins[binsidx][1]);
+                    int fieldr = otherr - myr + view_range;
+                    int fieldc = otherc - myc + view_range;
+                    // If if statement passes, then other agent is in view range.
+                    if(0 <= fieldr && fieldr < {view_size} && 0 <= fieldc && fieldc < {view_size}){{ 
+                        
+                    }}
+                }}
+            }}
+        }}
+
+        // Render -1 for walls
     }}
 }}"""
 print(kernel)

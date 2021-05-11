@@ -29,7 +29,7 @@ class State:
                 start=testing
             )
             f = np.zeros((self.rows, self.cols), dtype=np.int32)
-            for pos in poss:
+            for pos in p:
                 f[tuple(pos)] = 1
             poss.append(p)
             goals.append(g)
@@ -47,6 +47,7 @@ class State:
                 self.rows,
                 self.cols,
                 self.nagents,
+                self.nenv,
                 WALL_COLLISION_REWARD,
                 ROBOT_COLLISION_REWARD,
                 GOAL_REWARD,
@@ -71,7 +72,7 @@ class State:
             self.goals_gpu,
             self.field_gpu,
             block=(1024, 1, 1),
-            grid=(1, 1, 1),
+            grid=(self.nenv, 1, 1),
         )
         if timing:
             end.record()

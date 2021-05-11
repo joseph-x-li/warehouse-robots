@@ -1,21 +1,22 @@
 import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
-
+# each environment gets a block, all threads in block run in parallel to compute step. Launch multiple blocks in parallel
 def stepkernel(
     rows,
     cols,
     nagents,
-    WALL_COLLISION_REWARD,
+    nenv,
+    WCOLLISION_REWARD,
     ROBOT_COLLISION_REWARD,
     GOAL_REWARD,
 ):
     kernel = f""" \
-__global__ void step(float *rewards, int *actions, int *poss, int *goals, int *field){{
+__global__ void step(float *all_rewards, int *all_actions, int *all_poss, int *all_goals, int *all_fields){{
     const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int blockidx = blockIdx.x;
-    const int nblocks = gridDim.x;
+    // const int nblocks = gridDim.x;
 
     const int movlookup_r[4] = {{ -1, 0, 1,  0 }};
     const int movlookup_c[4] = {{  0, 1, 0, -1 }};
@@ -23,9 +24,16 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
     int oldposctr = 0;
     int oldpos_r[1000];
     int oldpos_c[1000];
-    
-    int start = blockidx * nthreads + threadidx;
-    int step = nblocks * nthreads;
+
+    int start = threadidx; //already in block
+    int step = nthreads;
+
+    // pull from correct index in overall arrays
+    int *actions = &(all_actions[blockidx * {nagents}]);
+    float *rewards = &(all_rewards[blockidx * {nagents}]);
+    int *poss = &(all_poss[blockidx * {nagents}]);
+    int *goals = &(all_goals[blockidx * {nagents}]);
+    int *field = &(all_fields[blockidx * {rows * cols}]);
 
     for(int i = start; i < {nagents}; i += step){{
         float reward = 0.0;
@@ -50,7 +58,7 @@ __global__ void step(float *rewards, int *actions, int *poss, int *goals, int *f
                 nextpos[1] = currpos[1] + movlookup_c[action % 4];
 
                 if(nextpos[0] < 0 || nextpos[1] < 0 || nextpos[0] >= {rows} || nextpos[1] >= {cols}){{
-                    reward += {WALL_COLLISION_REWARD};
+                    reward += {WCOLLISION_REWARD};
                     nextpos[0] = currpos[0];
                     nextpos[1] = currpos[1];
                 }} else if(atomicCAS(&field[nextpos[0] * {cols} + nextpos[1]], 0, 1) == 1) {{
