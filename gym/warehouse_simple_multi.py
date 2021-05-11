@@ -1,4 +1,5 @@
 from .gym_mock import GymMock
+import gym.testcases as testcases
 import random
 import time
 import numpy as np
@@ -18,7 +19,6 @@ spec = [
     ("movlookup", int32[:, :]),
     ("field", int32[:, :]),
 ]
-
 
 @jitclass(spec)
 class State:
@@ -166,7 +166,7 @@ class State:
 
 
 class Gym(GymMock):
-    rows, cols = (1000, 1000)
+    rows, cols = 1000, 1000
     nagents = 10000
     view_size = 11
 

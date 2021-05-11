@@ -3,16 +3,22 @@ import gym
 import numpy as np
 
 
+# pos, goals, field = gpumenv.state.copy_gpu_data()
 # pos, goals, field = gpuenv.state.copy_gpu_data()
+# pos, goals, field = cpuenv.state.poss, cpuenv.state.goals, cpuenv.state.field
 # gpustate[0][:-4].astype(np.int32).reshape((11,11))
+# gpumstate[0][:-4].astype(np.int32).reshape((11,11))
 # cpustate[0][:-4].astype(np.int32).reshape((11,11))
 
 cpuenv = gym.make("warehouse_simple_multi")
 gpuenv = gym.make("warehouse_simple_multi_gpu")
+gpumenv = gym.make("warehouse_simple_mega_gpu")
 
 cpustate = cpuenv.reset(testing=True)
 gpustate = gpuenv.reset(testing=True)
+gpumstate = gpumenv.reset(11, testing=True)
 assert np.allclose(cpustate, gpustate)
+assert np.allclose(np.tile(cpustate, (11, 1)), gpumstate)
 
 action1 = np.zeros((11,), dtype=np.int32)
 action2 = np.array((
@@ -37,5 +43,8 @@ actions = [
 for action in actions:
     cpustate, cpurewards, _, _ = cpuenv.step(action)
     gpustate, gpurewards, _, _ = gpuenv.step(action)
+    gpumstate, gpumrewards, _, _ = gpumenv.step(np.tile(action, (11,)))
     assert np.allclose(cpustate, gpustate)
     assert np.allclose(cpurewards, gpurewards)
+    assert np.allclose(np.tile(cpustate, (11, 1)), gpumstate)
+    assert np.allclose(np.tile(cpurewards, (11,)), gpumrewards)

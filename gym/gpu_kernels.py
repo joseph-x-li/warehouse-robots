@@ -16,26 +16,22 @@ __global__ void step(float *all_rewards, int *all_actions, int *all_poss, int *a
     const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int blockidx = blockIdx.x;
-    // const int nblocks = gridDim.x;
+
+    // pull from correct index in overall arrays
+    float *rewards = &(all_rewards[blockidx * {nagents}]);
+    int *actions = &(all_actions[blockidx * {nagents}]);
+    int *poss = &(all_poss[blockidx * {nagents * 2}]);
+    int *goals = &(all_goals[blockidx * {nagents * 2}]);
+    int *field = &(all_fields[blockidx * {rows * cols}]);
 
     const int movlookup_r[4] = {{ -1, 0, 1,  0 }};
     const int movlookup_c[4] = {{  0, 1, 0, -1 }};
-    
+
     int oldposctr = 0;
     int oldpos_r[1000];
     int oldpos_c[1000];
 
-    int start = threadidx; //already in block
-    int step = nthreads;
-
-    // pull from correct index in overall arrays
-    int *actions = &(all_actions[blockidx * {nagents}]);
-    float *rewards = &(all_rewards[blockidx * {nagents}]);
-    int *poss = &(all_poss[blockidx * {nagents}]);
-    int *goals = &(all_goals[blockidx * {nagents}]);
-    int *field = &(all_fields[blockidx * {rows * cols}]);
-
-    for(int i = start; i < {nagents}; i += step){{
+    for(int i = threadidx; i < {nagents}; i += nthreads){{
         float reward = 0.0;
         int action = actions[i];
         int currpos[2];
@@ -100,25 +96,26 @@ __global__ void step(float *all_rewards, int *all_actions, int *all_poss, int *a
     return SourceModule(kernel).get_function("step")
 
 
-def tensorkernel(rows, cols, view_size, nagents):
+def tensorkernel(rows, cols, view_size, nagents, nenv):
     kernel = f""" \
-__global__ void tensor(float *states, int *poss, int *goals, int *field){{
+__global__ void tensor(float *all_states, int *all_poss, int *all_goals, int *all_fields){{
     const int threadidx = threadIdx.x;
     const int nthreads = blockDim.x;
     const int blockidx = blockIdx.x;
-    const int nblocks = gridDim.x;
 
     const int view_range = {view_size // 2};
     const int displacement = {view_size ** 2};
     const int statesize = {view_size ** 2 + 4};
 
-    int pos[2];
-    int goal[2];
+    float *states = &(all_states[blockidx * {nagents} * statesize]);
+    int *poss = &(all_poss[blockidx * {nagents * 2}]);
+    int *goals = &(all_goals[blockidx * {nagents * 2}]);
+    int *field = &(all_fields[blockidx * {rows * cols}]);
 
-    int start = blockidx * nthreads + threadidx;
-    int step = nblocks * nthreads;
 
-    for(int i = start; i < {nagents}; i += step){{
+    for(int i = threadidx; i < {nagents}; i += nthreads){{
+        int pos[2];
+        int goal[2];
         pos[0] = poss[i * 2];
         pos[1] = poss[(i * 2) + 1];
         goal[0] = goals[i * 2];

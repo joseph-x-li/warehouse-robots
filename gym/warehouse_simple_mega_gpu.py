@@ -1,4 +1,5 @@
 from .gym_mock import GymMock
+import gym.testcases as testcases
 import random
 import numpy as np
 import time
@@ -25,9 +26,8 @@ class State:
         self.rows, self.cols = rows, cols
         poss, goals, field = [], [], []
         for _ in range(self.nenv):
-            p, g = self._generate_positions(start=testing), self._generate_positions(
-                start=testing
-            )
+            p = self._generate_positions(start=testing)
+            g = self._generate_positions(end=testing)
             f = np.zeros((self.rows, self.cols), dtype=np.int32)
             for pos in p:
                 f[tuple(pos)] = 1
@@ -54,11 +54,11 @@ class State:
             )
         if self.tensor_gpu is None:
             self.tensor_gpu = gpu_kernels.tensorkernel(
-                self.rows, self.cols, self.view_size, self.nagents
+                self.rows, self.cols, self.view_size, self.nagents, self.nenv
             )
 
     def step(self, actions, timing):
-        rewards = np.zeros((self.nagents,), dtype=np.float32)
+        rewards = np.zeros((self.nenv * self.nagents,), dtype=np.float32)
         hold1 = cuda.Out(rewards)
         hold2 = cuda.In(actions)
         if timing:
@@ -77,11 +77,11 @@ class State:
         if timing:
             end.record()
             end.synchronize()
-            print("[GPU]\t[STEP]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
+            print("[GPUM]\t[STEP]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
         return rewards
 
     def tensor(self, timing):
-        states = np.zeros((self.nagents, self.view_size ** 2 + 4), dtype=np.float32)
+        states = np.zeros((self.nenv * self.nagents, self.view_size ** 2 + 4), dtype=np.float32)
         hold1 = cuda.Out(states)
         if timing:
             start = cuda.Event()
@@ -93,49 +93,19 @@ class State:
             self.goals_gpu,
             self.field_gpu,
             block=(1024, 1, 1),
-            grid=(1, 1, 1),
+            grid=(self.nenv, 1, 1),
         )
         if timing:
             end.record()
             end.synchronize()
-            print("[GPU]\t[TSR]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
+            print("[GPUM]\t[TSR]\t[KRNL]\t(ms): {:.4f}".format(start.time_till(end)))
         return states
 
     def _generate_positions(self, start=False, end=False):
         if start:
-            return np.array(
-                [
-                    (0, 0),
-                    (1, 0),
-                    (1, 1),
-                    (2, 1),
-                    (0, 2),
-                    (2, 2),
-                    (2, 3),
-                    (2, 4),
-                    (1, 5),
-                    (0, 6),
-                    (2, 6),
-                ],
-                dtype=np.int32,
-            )
+            return testcases.genposs()
         if end:
-            return np.array(
-                [
-                    (6, 0),
-                    (6, 1),
-                    (6, 2),
-                    (6, 3),
-                    (6, 4),
-                    (6, 5),
-                    (1, 3),
-                    (0, 4),
-                    (0, 5),
-                    (0, 6),
-                    (1, 6),
-                ],
-                dtype=np.int32,
-            )
+            return testcases.gengoals()
 
         num_set = set()
         while len(num_set) < self.nagents:
@@ -145,9 +115,9 @@ class State:
         return np.array(list(num_set), dtype=np.int32)
 
     def copy_gpu_data(self):
-        poss_cpu = np.zeros((self.nagents, 2), dtype=np.int32)
-        goals_cpu = np.zeros((self.nagents, 2), dtype=np.int32)
-        field_cpu = np.zeros((self.rows, self.cols), dtype=np.int32)
+        poss_cpu = np.zeros((self.nenv, self.nagents, 2), dtype=np.int32)
+        goals_cpu = np.zeros((self.nenv, self.nagents, 2), dtype=np.int32)
+        field_cpu = np.zeros((self.nenv, self.rows, self.cols), dtype=np.int32)
         cuda.memcpy_dtoh(poss_cpu, self.poss_gpu)
         cuda.memcpy_dtoh(goals_cpu, self.goals_gpu)
         cuda.memcpy_dtoh(field_cpu, self.field_gpu)
@@ -155,38 +125,37 @@ class State:
 
 
 class Gym(GymMock):
-    testing = False
-    rows, cols = (11, 11) if testing else (1000, 1000)
-    speed_mod = True
-    nagents = 11 if testing else 1000
+    rows, cols = 1000, 1000
+    nagents = 10000
     view_size = 11
 
     def __init__(self):
-        action_space_size = 9 if self.speed_mod else 5  # S + (NEWS, 2 * NEWS)
-        super().__init__(
-            action_space_size, (4 + (self.view_size ** 2),)
-        )  # mypos, goalpos, receptive field
+        action_space_size = 9
+        super().__init__(action_space_size, (4 + (self.view_size ** 2),))
         # self.reset()
 
-    def reset(self, nenv, timing=False):
-        self.state = State(
-            nenv, self.nagents, self.rows, self.cols, self.view_size, self.testing
-        )
-        return self.state.tensor(timing)
+    def reset(self, nenv, testing=False):
+        if testing:
+            self.state = State(nenv, 11, 11, 11, 11, testing)
+        else:
+            self.state = State(
+                nenv, self.nagents, self.rows, self.cols, self.view_size, testing
+            )
+        return self.state.tensor(False)
 
     def step(self, actions, timing=False):
         if timing:
             start = time.time()
             rewards = self.state.step(actions, timing)
             print(
-                "[GPU]\t[STEP]\t[CALL]\t(ms): {:.4f}".format(
+                "[GPUM]\t[STEP]\t[CALL]\t(ms): {:.4f}".format(
                     (time.time() - start) * 1000
                 )
             )
             start = time.time()
             tsr = self.state.tensor(timing)
             print(
-                "[GPU]\t[TSR]\t[CALL]\t(ms): {:.4f}".format(
+                "[GPUM]\t[TSR]\t[CALL]\t(ms): {:.4f}".format(
                     (time.time() - start) * 1000
                 )
             )

@@ -1,4 +1,5 @@
 from .gym_mock import GymMock
+import gym.testcases as testcases
 import random
 import numpy as np
 import time
@@ -39,13 +40,14 @@ class State:
                 self.rows,
                 self.cols,
                 self.nagents,
+                1,
                 WALL_COLLISION_REWARD,
                 ROBOT_COLLISION_REWARD,
                 GOAL_REWARD,
             )
         if self.tensor_gpu is None:
             self.tensor_gpu = gpu_kernels.tensorkernel(
-                self.rows, self.cols, self.view_size, self.nagents
+                self.rows, self.cols, self.view_size, self.nagents, 1
             )
 
     def step(self, actions, timing):
@@ -62,8 +64,8 @@ class State:
             self.poss_gpu,
             self.goals_gpu,
             self.field_gpu,
-            block=(256, 1, 1),
-            grid=(8, 1, 1),
+            block=(1024, 1, 1),
+            grid=(1, 1, 1),
         )
         if timing:
             end.record()
@@ -84,8 +86,8 @@ class State:
             self.poss_gpu,
             self.goals_gpu,
             self.field_gpu,
-            block=(256, 1, 1),
-            grid=(8, 1, 1),
+            block=(1024, 1, 1),
+            grid=(1, 1, 1),
         )
         if timing:
             end.record()
@@ -96,40 +98,9 @@ class State:
 
     def _generate_positions(self, start=False, end=False):
         if start:
-            return np.array(
-                [
-                    (0, 0),
-                    (1, 0),
-                    (1, 1),
-                    (2, 1),
-                    (0, 2),
-                    (2, 2),
-                    (2, 3),
-                    (2, 4),
-                    (1, 5),
-                    (0, 6),
-                    (2, 6),
-                ],
-                dtype=np.int32,
-            )
+            return testcases.genposs()
         if end:
-            return np.array(
-                [
-                    (6, 0),
-                    (6, 1),
-                    (6, 2),
-                    (6, 3),
-                    (6, 4),
-                    (6, 5),
-                    (1, 3),
-                    (0, 4),
-                    (0, 5),
-                    (0, 6),
-                    (1, 6),
-                ],
-                dtype=np.int32,
-            )
-
+            return testcases.gengoals()
         num_set = set()
         while len(num_set) < self.nagents:
             a, b = random.randint(0, self.rows - 1), random.randint(0, self.cols - 1)
@@ -154,19 +125,17 @@ class Gym(GymMock):
 
     def __init__(self):
         action_space_size = 9
-        super().__init__(
-            action_space_size, (4 + (self.view_size ** 2),)
-        )  # mypos, goalpos, receptive field
+        super().__init__(action_space_size, (4 + (self.view_size ** 2),))
         self.reset()
 
-    def reset(self, timing=False, testing=False):
+    def reset(self, testing=False):
         if testing:
             self.state = State(11, 11, 11, 11, testing)
         else:
             self.state = State(
                 self.nagents, self.rows, self.cols, self.view_size, testing
             )
-        return self.state.tensor(timing)
+        return self.state.tensor(False)
 
     def step(self, actions, timing=False):
         if timing:

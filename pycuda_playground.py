@@ -74,7 +74,7 @@ __global__ void tensor(float *states, int *poss, int *goals){{
 
     int start = threadidx;
     int step = nthreads;
-    
+
     for(int i = start; i < {nbins_rounded}; i += step){{
         bincounters[i] = 0;
         binpfx[i] = 0;
@@ -146,7 +146,7 @@ __global__ void tensor(float *states, int *poss, int *goals){{
                     int fieldc = otherc - myc + view_range;
                     // If if statement passes, then other agent is in view range.
                     if(0 <= fieldr && fieldr < {view_size} && 0 <= fieldc && fieldc < {view_size}){{ 
-                        
+                        states[fieldr * {view_size} + fieldc] = 1.0;
                     }}
                 }}
             }}
