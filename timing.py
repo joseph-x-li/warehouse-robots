@@ -32,7 +32,7 @@ def timeenv_mega(name, timing):
     for action in actions:
         nenv.step(action, timing=timing)
 
-for _ in trange(100):
-    # timeenv_multi("warehouse_simple_multi", True)
-    # timeenv_multi("warehouse_simple_multi_gpu", False)
-    timeenv_mega("warehouse_simple_mega_gpu", False)
+timeenv_multi("warehouse_simple_multi", True)
+# for _ in trange(100):
+#     # timeenv_multi("warehouse_simple_multi_gpu", False)
+#     timeenv_mega("warehouse_simple_mega_gpu", False)

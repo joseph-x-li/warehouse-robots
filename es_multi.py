@@ -6,6 +6,9 @@ import torch.nn as nn
 import numpy as np
 from functools import partial
 
+import wandb
+wandb.init(project="Warehouse_Evolution")
+
 torch.set_grad_enabled(False) # important af
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -83,7 +86,9 @@ def evaluate(nrepeats, envname, agent):
         return sum(agent_score) / len(agent_score)
 
 def simplegenetic(psi, phi, F, F2, N, T, C, G):
+    SAVE_EVERY = 5
     """
+    SAVE_EVERY: Save agent every time 
     psi: agent mutation function
     phi: single agent initialization function
     F: fitness function
@@ -103,14 +108,16 @@ def simplegenetic(psi, phi, F, F2, N, T, C, G):
     elite = None
     for g in range(G):
         print(f"Generation {g + 1}/{G}")
+        if g % SAVE_EVERY == 0:
+            torch.save(topT[0].state_dict(), f"./saved_weights/{wandb.run.name}_gen_{g}.pt")
         for idx, k in enumerate(tqdm(np.random.randint(T + 1, size=(N,)), desc="Create next population")):
             population[idx] = psi(topT[k])
             pscores[idx] = F(population[idx])
         
         topTidx = np.argsort(-np.array(pscores))[:T]
         print("Top T Scores:")
-        for idx in topTidx:
-            print("{:.2f} ".format(pscores[idx]), end="")
+        topTscores = [pscores[idx] for idx in topTidx]
+        print(topTscores)
         print("")
 
         topT = [population[idx] for idx in topTidx]
@@ -123,21 +130,22 @@ def simplegenetic(psi, phi, F, F2, N, T, C, G):
         elitescores = [F2(elitecandidate) for elitecandidate in elites]
         elite = elites[np.array(elitescores).argmax()]
         print(f"Elite Score: {max(elitescores)}")
+        wandb.log({"TopT Avg Score": sum(topTscores) / len(topTscores), "Elite Score": max(elitescores)})
 
         topT.append(elite)
 
     return elite
 
 def main():
-    AGENTS = 20
-    REPEATS = 3
-    ELITEREPEATS = 10
-    CANDIDATE_ELITES = 5
     GENERATIONS = 100
     BEAM_SIZE = 10
-    ENVNAME = "warehouse_simple_multi"
+    AGENTS = 20
+    REPEATS = 3
+    CANDIDATE_ELITES = 4
+    ELITEREPEATS = 7
+    # ENVNAME = "warehouse_simple_multi"
     # ENVNAME = "warehouse_simple_multi_gpu"
-    # ENVNAME = "warehouse_simple_mega_gpu"
+    ENVNAME = "warehouse_simple_mega_gpu"
 
     _hold = gym.make(ENVNAME)
     _createmodel = partial(createmodel, _hold.observation_space.shape, _hold.action_space.n)

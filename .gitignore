@@ -1,4 +1,7 @@
 wandb
+saved_weights
+recordings
+_hold.npy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
