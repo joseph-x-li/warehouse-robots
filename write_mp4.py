@@ -9,11 +9,13 @@ parser.add_argument('--runname', type=str)
 args = parser.parse_args()
 
 with open("_hold.npy", 'rb') as f:
-    frames = np.load(f)
+    frames = np.load(f).astype(np.uint8) * 255
 
-fourcc = cv2.VideoWriter_fourcc(*"H264")
+print(frames.shape)
+
+fourcc = cv2.VideoWriter_fourcc(*"MJPG")
 # out, fourcc, fps, WIDTHxHEIGHT, COLOR?
-writer = cv2.VideoWriter(f"{args.runname}.mp4", fourcc, 30, frames[0].shape[::-1], False)
+writer = cv2.VideoWriter(f"recordings/{args.runname}.mp4", fourcc, 30, frames[0].shape[::-1], False)
 
 for frame in frames:
     writer.write(frame)

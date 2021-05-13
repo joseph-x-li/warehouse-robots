@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import subprocess
 import numpy as np
+from tqdm import trange
 
 torch.set_grad_enabled(False) # important af
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -27,14 +28,15 @@ def record(envname, run_name, frames, region):
     """
     r1, r2, c1, c2 = region
     env = gym.make(envname)
-    observations = env.reset()
     agent = createmodel(env.observation_space.shape, env.action_space.n)
+    observations = env.reset()
     agent.load_state_dict(torch.load(f"saved_weights/{run_name}.pt"))
 
     frame_accum = []
 
     for _ in trange(frames, desc="Env Stepping..."):
         _, _, field = env.state.copy_gpu_data()
+        # field = env.field.copy()
         frame_accum.append(field[r1:r2, c1:c2])
         inp = torch.tensor(observations).to(device)
         output_probabilities = agent(inp).cpu().numpy()
@@ -47,12 +49,12 @@ def record(envname, run_name, frames, region):
     print(frame_accum.shape)
     np.save("_hold.npy", frame_accum)
 
-    subprocess.run(["write_mp4.py", "--runname", run_name])  
+    # subprocess.run(["write_mp4.py", "--runname", run_name])  
 
 if __name__ == "__main__":
     record(
         "warehouse_simple_multi_gpu", 
-        "faithful-surf-5_gen_0", 
+        "faithful-surf-5_gen_55", 
         300,
         (0, 500, 0, 500)
     )
